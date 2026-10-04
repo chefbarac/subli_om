@@ -9,7 +9,8 @@ import type {
   Stage,
 } from '@/types';
 
-const LEGACY_STORES: string[] = ['sizes', 'positions'];
+const CURRENT_STORES = ['stages', 'orders', 'orderItems', 'settings'] as const;
+type CurrentStore = (typeof CURRENT_STORES)[number];
 
 interface SubliDB extends DBSchema {
   stages: {
@@ -38,11 +39,16 @@ function getDb() {
   if (!dbPromise) {
     dbPromise = openDB<SubliDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        const storeNames = db.objectStoreNames as unknown as {
-          contains(name: string): boolean;
-        };
-        for (const legacy of LEGACY_STORES) {
-          if (storeNames.contains(legacy)) db.deleteObjectStore(legacy as never);
+        // Drop stores the schema no longer declares (e.g. the old `sizes` and
+        // `positions` lists). Listing the stores to keep, rather than the ones
+        // to drop, means a store removed later needs no change here.
+        // `idb` types deleteObjectStore() to only accept stores still in the
+        // schema, which is exactly the operation a migration needs, hence the cast.
+        const existing = Array.from(db.objectStoreNames as unknown as ArrayLike<string>);
+        for (const name of existing) {
+          if (!CURRENT_STORES.includes(name as CurrentStore)) {
+            db.deleteObjectStore(name as never);
+          }
         }
         if (!db.objectStoreNames.contains('stages')) {
           db.createObjectStore('stages', { keyPath: 'id' });
