@@ -136,17 +136,18 @@ function Sheet({
   const groups = groupByProductType(items, order, productTypes);
 
   return (
-        <div className="mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black print:bg-white print:shadow-none">
+    <div className="relative mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black print:bg-white print:shadow-none">
+      <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
+        <img
+          src="/img/agt-logo.png"
+          alt=""
+          aria-hidden="true"
+          className="h-[75mm] w-auto -rotate-12 object-contain opacity-[0.06] print:opacity-[0.04]"
+        />
+      </div>
 
+      <div className="relative z-10">
       <header className="relative flex items-start justify-between gap-4 border-b-2 border-black pb-2">
-        <div className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center opacity-5 print:opacity-[0.04]">
-          <img
-            src="/img/agt-logo.png"
-            alt=""
-            aria-hidden="true"
-            className="h-[50mm] w-auto object-contain"
-          />
-        </div>
         <div className="flex items-center gap-3">
           <img
             src="/img/agt-logo.png"
@@ -214,6 +215,7 @@ function Sheet({
           <p className="mt-1 font-semibold">Customer signature</p>
         </div>
       </footer>
+      </div>
     </div>
   );
 }
