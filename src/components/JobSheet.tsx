@@ -1,7 +1,6 @@
 ﻿import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
-import { dueLabel } from '@/lib/dates';
 import { sheetColumns } from '@/lib/normalize';
 import { Button } from './ui';
 import {
@@ -173,7 +172,6 @@ function Sheet({
         />
         <Row label="Product" value={groups.map((group) => group.title).join(', ')} />
         <Row label="Description" value={order.description} />
-        <Row label="Printed" value={format(new Date(), 'dd MMM yyyy')} />
         <Row label="Total items" value={String(items.length)} />
       </section>
 
@@ -208,7 +206,9 @@ function Sheet({
           <p className="font-semibold">Notes</p>
           <div className="mt-6 border-b border-slate-300" />
           <p className="mt-3 text-slate-500">{settings.receiptFooter}</p>
-          {order.dueDate ? <p className="text-slate-500">{dueLabel(order.dueDate)}</p> : null}
+          <p className="mt-3 text-slate-500">
+            This receipt was printed on {format(new Date(), 'dd MMM yyyy')}.
+          </p>
         </div>
         <div className="w-48 text-center">
           <div className="h-10 border-b border-black" />

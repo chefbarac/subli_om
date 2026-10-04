@@ -55,18 +55,21 @@ export function Field({
   hint,
   children,
   className = '',
+  as = 'label',
 }: {
   label: string;
   hint?: string;
   children: ReactNode;
   className?: string;
+  as?: 'label' | 'div';
 }) {
+  const Tag = as as 'label';
   return (
-    <label className={`block ${className}`}>
+    <Tag className={`block ${className}`}>
       <span className="field-label">{label}</span>
       {children}
       {hint ? <span className="mt-1 block text-xs text-slate-500">{hint}</span> : null}
-    </label>
+    </Tag>
   );
 }
 

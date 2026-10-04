@@ -7,7 +7,7 @@ const BOM = '\uFEFF';
 const CSV_HEADERS: Partial<Record<ColumnKey, string>> = {
   name: 'name',
   jerseyNo: 'num',
-  position: 'position',
+  position: 'pos',
   tag: 'tag',
   label: 'label',
   cutType: 'cuttype',

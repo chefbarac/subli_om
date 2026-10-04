@@ -375,8 +375,8 @@ export function OrderEditor({
             </Select>
           </Field>
 
-          <Field label="Status">
-            <label className="flex h-[34px] items-center gap-2 text-sm text-slate-700">
+          <Field label="Status" as="div">
+            <span className="flex h-[34px] items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={isCompleted}
@@ -384,7 +384,7 @@ export function OrderEditor({
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-400"
               />
               Mark as completed
-            </label>
+            </span>
           </Field>
 
           <Field label="Order description" className="md:col-span-3">
