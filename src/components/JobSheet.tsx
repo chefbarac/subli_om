@@ -277,7 +277,7 @@ function NameWithNotes({ name, note }: { name: string; note: string }) {
   const cleaned = note.trim();
   return (
     <span className="flex flex-wrap items-center gap-1">
-      <span className="text-sm font-semibold uppercase">{name}</span>
+      <span className="text-sm">{name}</span>
       {cleaned ? (
         <span className="rounded border border-black bg-amber-200 px-1 py-px text-[9px] font-bold uppercase leading-tight">
           {cleaned}
