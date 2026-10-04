@@ -123,7 +123,7 @@ export function App() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-500">
-        Opening local databaseâ€¦
+        Opening local database…
       </div>
     );
   }
@@ -165,7 +165,7 @@ export function App() {
         <TextInput
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search customer, order no, or a nameâ€¦"
+          placeholder="Search customer, order no, or a name…"
           className="w-64"
         />
 
@@ -275,7 +275,7 @@ export function App() {
 
       {data.orders.length === 0 && view === 'board' ? (
         <div className="pointer-events-none fixed bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-full bg-slate-900/85 px-4 py-2 text-xs font-semibold text-white shadow-lg">
-          No orders yet â€” click <span className="text-brand-300">+ New order</span> to create the
+          No orders yet — click <span className="text-brand-300">+ New order</span> to create the
           first one. Everything is saved in this browser.
         </div>
       ) : null}
