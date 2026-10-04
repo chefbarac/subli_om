@@ -28,7 +28,6 @@ interface BoardViewProps {
   productTypeNames: Map<number, string>;
   onOpenOrder: (orderId: number) => void;
   onMoveStage: (orderId: number, stageId: number) => void;
-  onNewOrder: (stageId: number) => void;
 }
 
 export function BoardView({
@@ -38,7 +37,6 @@ export function BoardView({
   productTypeNames,
   onOpenOrder,
   onMoveStage,
-  onNewOrder,
 }: BoardViewProps) {
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
 
@@ -106,7 +104,6 @@ export function BoardView({
             itemCounts={itemCounts}
             productTypeNames={productTypeNames}
             onOpenOrder={onOpenOrder}
-            onNewOrder={onNewOrder}
           />
         ))}
       </div>
@@ -131,14 +128,12 @@ function StageColumn({
   itemCounts,
   productTypeNames,
   onOpenOrder,
-  onNewOrder,
 }: {
   stage: Stage;
   orders: Order[];
   itemCounts: Map<number, number>;
   productTypeNames: Map<number, string>;
   onOpenOrder: (orderId: number) => void;
-  onNewOrder: (stageId: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${STAGE_PREFIX}${stage.id}` });
   const tone = stageTone(stage.sortOrder);
@@ -176,16 +171,6 @@ function StageColumn({
           ))
         )}
       </div>
-
-      <footer className="border-t border-slate-200 p-2">
-        <button
-          type="button"
-          onClick={() => onNewOrder(stage.id)}
-          className="w-full rounded-md border border-dashed border-slate-300 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-brand-400 hover:text-brand-600"
-        >
-          + New order
-        </button>
-      </footer>
     </section>
   );
 }

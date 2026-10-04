@@ -237,7 +237,6 @@ export function App() {
               productTypeNames={productTypeNames}
               onOpenOrder={(orderId) => setEditor({ orderId, stageId: 0 })}
               onMoveStage={(orderId, stageId) => void moveOrderStage(orderId, stageId)}
-              onNewOrder={(stageId) => setEditor({ orderId: null, stageId })}
             />
           ) : (
             <CalendarView
