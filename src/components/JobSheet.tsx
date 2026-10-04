@@ -136,7 +136,8 @@ function Sheet({
   const groups = groupByProductType(items, order, productTypes);
 
   return (
-    <div className="mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black shadow-2xl">
+        <div className="mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black print:bg-white print:shadow-none">
+
       <header className="flex items-start justify-between gap-4 border-b-2 border-black pb-2">
         <div>
           <h1 className="text-xl font-bold uppercase tracking-wide">{settings.companyName}</h1>
@@ -318,7 +319,7 @@ function Blank({
       <span className={`font-bold uppercase tracking-wide ${strong ? 'text-sm' : ''}`}>
         {label}
       </span>
-      <span className={`border-b border-black px-1 ${strong ? 'h-7 w-32' : 'h-6 w-28'}`} />
+      <div className={`flex-1 border-b border-black ${strong ? 'h-6' : 'h-5'}`} />
       <span className="text-[10px] text-slate-500">{currency}</span>
     </div>
   );
