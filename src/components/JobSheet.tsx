@@ -279,7 +279,7 @@ function NameWithNotes({ name, note }: { name: string; note: string }) {
     <span className="flex flex-wrap items-center gap-1">
       <span className="text-sm font-semibold uppercase">{name}</span>
       {cleaned ? (
-        <span className="rounded border border-black px-1 py-px text-[9px] font-bold uppercase leading-tight">
+        <span className="rounded border border-black bg-amber-200 px-1 py-px text-[9px] font-bold uppercase leading-tight">
           {cleaned}
         </span>
       ) : null}

@@ -605,7 +605,7 @@ function ItemTable({
                       </td>
                     ) : null}
                     {visible.includes('name') ? (
-                      <td className="min-w-[220px]">
+                      <td className="min-w-[320px]">
                         <TextInput
                           value={row.name}
                           onChange={(event) => onUpdate(row.key, { name: event.target.value })}
