@@ -1,5 +1,4 @@
 import { applyCase } from './caseRules';
-import { formatDate } from './dates';
 import { cleanText, unionColumns } from './normalize';
 import { type ColumnKey, type Order, type OrderItem, type Settings } from '@/types';
 
@@ -59,17 +58,11 @@ function buildRows(
   itemsByOrder: Map<number, OrderItem[]>,
   settings: Settings,
 ): string[][] {
+  // The per-order export is the names list and nothing else: no order number,
+  // customer, dates or stage. `unionColumns` still spans orders so a merged
+  // export keeps one consistent header.
   const active = unionColumns(orders);
-  const rows: string[][] = [
-    [
-      'Order No',
-      'Customer',
-      'Due Date',
-      'Product',
-      'Stage',
-      ...active.map((key) => CSV_HEADERS[key] ?? key),
-    ],
-  ];
+  const rows: string[][] = [active.map((key) => CSV_HEADERS[key] ?? key)];
 
   const sorted = [...orders].sort((a, b) => a.orderNo.localeCompare(b.orderNo));
 
@@ -77,29 +70,18 @@ function buildRows(
     const visible = unionColumns([order]);
     const items = itemsByOrder.get(order.id) ?? [];
 
-    const prefix = [
-      order.orderNo,
-      order.customerName,
-      order.dueDate ? formatDate(order.dueDate, 'yyyy-MM-dd') : '',
-      order.product,
-      '',
-    ];
-
     const cellFor = (item: OrderItem, key: ColumnKey): string => {
       const rule = COLUMN_CASES[key];
       return rule ? applyCase(item[key], settings[rule]) : cleanText(item[key]);
     };
 
     if (items.length === 0) {
-      rows.push([...prefix, ...active.map(() => '')]);
+      rows.push(active.map(() => ''));
       continue;
     }
 
     for (const item of items) {
-      rows.push([
-        ...prefix,
-        ...active.map((key) => (visible.includes(key) ? cellFor(item, key) : '')),
-      ]);
+      rows.push(active.map((key) => (visible.includes(key) ? cellFor(item, key) : '')));
     }
   }
 

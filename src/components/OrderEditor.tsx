@@ -17,10 +17,10 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { exportOrdersCsv } from '@/lib/csv';
-import { cleanText, normalizeColumns } from '@/lib/normalize';
+import { cleanText, defaultStageId, normalizeColumns } from '@/lib/normalize';
 import { suggestionsFor, type KnownValues } from '@/lib/known';
 
-import { SIZE_TAGS, labelForTag } from '@/lib/sizes';
+import { SIZE_LABELS, SIZE_TAGS, labelForTag } from '@/lib/sizes';
 import { useApp, type EditableRow } from '@/state/AppProvider';
 import { Button, Field, Modal, Select, TextArea, TextInput } from './ui';
 import {
@@ -31,6 +31,7 @@ import {
   type ColumnKey,
   type Order,
   type OrderItem,
+  type ProductType,
 } from '@/types';
 
 interface RowState extends EditableRow {
@@ -43,16 +44,17 @@ function nextKey(): string {
   return `row-${rowCounter}`;
 }
 
-function blankRow(): RowState {
+function blankRow(productTypeId: number | null): RowState {
   return {
     key: nextKey(),
     name: '',
     jerseyNo: '',
     position: '',
-    neckType: '',
+    cutType: '',
     tag: '',
     label: '',
     notes: '',
+    productTypeId,
   };
 }
 
@@ -63,10 +65,11 @@ function toRowState(item: OrderItem): RowState {
     name: item.name ?? '',
     jerseyNo: item.jerseyNo ?? '',
     position: item.position ?? '',
-    neckType: item.neckType ?? '',
+    cutType: item.cutType ?? '',
     tag: item.tag ?? '',
     label: item.label ?? '',
     notes: item.notes ?? '',
+    productTypeId: item.productTypeId ?? null,
   };
 }
 
@@ -74,6 +77,21 @@ function hasContent(row: RowState): boolean {
   return Boolean(
     cleanText(row.name) || cleanText(row.jerseyNo) || cleanText(row.position) || cleanText(row.tag),
   );
+}
+
+/**
+ * Tag and Label are strict dropdowns. An order saved before the size table was
+ * fixed can still hold a legacy spelling, so keep it selectable rather than
+ * silently blanking the row when it is opened.
+ */
+function tagOptions(current: string): string[] {
+  const value = cleanText(current);
+  return value && !SIZE_TAGS.includes(value) ? [value, ...SIZE_TAGS] : SIZE_TAGS;
+}
+
+function labelOptions(current: string): string[] {
+  const value = cleanText(current);
+  return value && !SIZE_LABELS.includes(value) ? [value, ...SIZE_LABELS] : SIZE_LABELS;
 }
 
 function Options({ id, values }: { id: string; values: string[] }) {
@@ -99,31 +117,36 @@ export function OrderEditor({
   onPrintSheet: (order: Order, items: OrderItem[]) => void;
   onDelete: (orderId: number) => void;
 }) {
-  const { data, known, activeStages, itemsByOrder, itemCounts, suggestOrderNo, saveOrder } =
-    useApp();
+  const { data, known, itemsByOrder, itemCounts, suggestOrderNo, saveOrder } = useApp();
 
   const existing =
     orderId === null ? null : data.orders.find((order) => order.id === orderId) ?? null;
 
+  const productTypes = data.productTypes;
+
   const [orderNo, setOrderNo] = useState(existing?.orderNo ?? suggestOrderNo());
   const [customerName, setCustomerName] = useState(existing?.customerName ?? '');
-  const [product, setProduct] = useState(existing?.product ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? '');
   const [stageId, setStageId] = useState(() => {
+    // A new order always starts at "For Designing", whatever column it was
+    // created from, so it lands in the design queue.
     if (existing) return existing.stageId;
-    if (data.stages.some((stage) => stage.id === initialStageId)) return initialStageId;
-    return activeStages[0]?.id ?? data.stages[0]?.id ?? 0;
+    return defaultStageId(data.stages) ?? initialStageId;
   });
   const [isCompleted, setIsCompleted] = useState(existing?.isCompleted ?? false);
   const [columns, setColumns] = useState<ColumnKey[]>(
     () => normalizeColumns(existing?.columns),
   );
+  const [productTypeIds, setProductTypeIds] = useState<number[]>(
+    () => existing?.productTypeIds ?? [productTypes[0]?.id ?? 0],
+  );
 
   const [rows, setRows] = useState<RowState[]>(() => {
-    if (orderId === null) return [blankRow()];
+    const fallbackType = existing?.productTypeIds[0] ?? productTypes[0]?.id ?? null;
+    if (orderId === null) return [blankRow(fallbackType)];
     const items = itemsByOrder.get(orderId) ?? [];
-    return items.length > 0 ? items.map(toRowState) : [blankRow()];
+    return items.length > 0 ? items.map(toRowState) : [blankRow(fallbackType)];
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -138,10 +161,10 @@ export function OrderEditor({
     () => suggestionsFor(known, 'customers', customerName),
     [customerName, known],
   );
-  const productOptions = useMemo(
-    () => suggestionsFor(known, 'products', product),
-    [known, product],
-  );
+
+  /** New rows join the first type so nothing starts out unassigned. */
+  const newRowType = productTypeIds[0] ?? productTypes[0]?.id ?? null;
+  const showTypeColumn = productTypeIds.length > 1 || productTypes.length > 1;
 
   function updateRow(key: string, patch: Partial<RowState>) {
     setRows((current) =>
@@ -164,6 +187,16 @@ export function OrderEditor({
     );
   }
 
+  function toggleProductType(id: number) {
+    setProductTypeIds((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+  }
+
+  function setAllRowsToType(id: number) {
+    setRows((current) => current.map((row) => ({ ...row, productTypeId: id })));
+  }
+
   function handleRowDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -179,10 +212,10 @@ export function OrderEditor({
     id: existing?.id ?? 0,
     orderNo: cleanText(orderNo),
     customerName: cleanText(customerName),
-    product: cleanText(product),
     description: cleanText(description),
     dueDate: dueDate || null,
     stageId,
+    productTypeIds,
     columns,
     isCompleted,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
@@ -200,10 +233,11 @@ export function OrderEditor({
           name: cleanText(row.name),
           jerseyNo: cleanText(row.jerseyNo),
           position: cleanText(row.position),
-          neckType: cleanText(row.neckType),
+          cutType: cleanText(row.cutType),
           tag: cleanText(row.tag),
           label: cleanText(row.label) || labelForTag(cleanText(row.tag)),
           notes: cleanText(row.notes),
+          productTypeId: row.productTypeId ?? null,
         })),
     [draftOrder.id, rows],
   );
@@ -230,10 +264,11 @@ export function OrderEditor({
       name: item.name,
       jerseyNo: item.jerseyNo,
       position: item.position,
-      neckType: item.neckType,
+      cutType: item.cutType,
       tag: item.tag,
       label: item.label,
       notes: item.notes,
+      productTypeId: item.productTypeId,
     }));
 
     saveOrder(draftOrder, editable, existing?.id)
@@ -290,6 +325,14 @@ export function OrderEditor({
           </p>
         ) : null}
 
+        <ProductTypePicker
+          types={productTypes}
+          selected={productTypeIds}
+          rowCount={rows.length}
+          onToggle={toggleProductType}
+          onSetAll={setAllRowsToType}
+        />
+
         <div className="grid gap-3 md:grid-cols-3">
           <Field label="Order number">
             <div className="flex gap-1.5">
@@ -310,15 +353,6 @@ export function OrderEditor({
               value={customerName}
               onChange={(event) => setCustomerName(event.target.value)}
               placeholder="e.g. Muscat Sports Club"
-            />
-          </Field>
-
-          <Field label="Product">
-            <TextInput
-              list="known-products"
-              value={product}
-              onChange={(event) => setProduct(event.target.value)}
-              placeholder="e.g. Navy jersey, full sublimation"
             />
           </Field>
 
@@ -368,13 +402,14 @@ export function OrderEditor({
           columns={columns}
           known={known}
           customerOptions={customerOptions}
-          productOptions={productOptions}
+          productTypes={productTypes}
+          showTypeColumn={showTypeColumn}
           sensors={sensors}
           onDragEnd={handleRowDragEnd}
           onUpdate={updateRow}
           onToggleColumn={toggleColumn}
           onRemove={(key) => setRows((current) => current.filter((row) => row.key !== key))}
-          onAdd={() => setRows((current) => [...current, blankRow()])}
+          onAdd={() => setRows((current) => [...current, blankRow(newRowType)])}
         />
 
         <p className="text-xs text-slate-500">
@@ -386,12 +421,80 @@ export function OrderEditor({
   );
 }
 
+function ProductTypePicker({
+  types,
+  selected,
+  rowCount,
+  onToggle,
+  onSetAll,
+}: {
+  types: ProductType[];
+  selected: number[];
+  rowCount: number;
+  onToggle: (id: number) => void;
+  onSetAll: (id: number) => void;
+}) {
+  if (types.length === 0) {
+    return (
+      <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
+        No product types yet — add them in Settings before creating orders.
+      </p>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <header className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          Product types in this order
+        </h3>
+        {selected.length > 1 ? (
+          <span className="text-xs text-slate-500">
+            Printed on the job sheet as one table each
+          </span>
+        ) : null}
+      </header>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        {types.map((type) => {
+          const isOn = selected.includes(type.id);
+          return (
+            <label
+              key={type.id}
+              className="flex items-center gap-1.5 text-sm text-slate-700"
+            >
+              <input
+                type="checkbox"
+                checked={isOn}
+                onChange={() => onToggle(type.id)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-400"
+              />
+              {type.name}
+              {selected.length > 1 && isOn && rowCount > 0 ? (
+                <button
+                  type="button"
+                  title={`Put all ${rowCount} rows on ${type.name}`}
+                  onClick={() => onSetAll(type.id)}
+                  className="rounded bg-white px-1 text-[10px] font-bold uppercase text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50"
+                >
+                  all
+                </button>
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ItemTable({
   rows,
   columns,
   known,
   customerOptions,
-  productOptions,
+  productTypes,
+  showTypeColumn,
   sensors,
   onDragEnd,
   onUpdate,
@@ -403,7 +506,8 @@ function ItemTable({
   columns: ColumnKey[];
   known: KnownValues;
   customerOptions: string[];
-  productOptions: string[];
+  productTypes: ProductType[];
+  showTypeColumn: boolean;
   sensors: ReturnType<typeof useSensors>;
   onDragEnd: (event: DragEndEvent) => void;
   onUpdate: (key: string, patch: Partial<RowState>) => void;
@@ -412,6 +516,7 @@ function ItemTable({
   onAdd: () => void;
 }) {
   const visible = ITEM_COLUMNS.filter((key) => columns.includes(key));
+  const headings = showTypeColumn ? ['Product', ...visible.map((key) => COLUMN_LABELS[key])] : visible.map((key) => COLUMN_LABELS[key]);
 
   return (
     <section>
@@ -455,10 +560,8 @@ function ItemTable({
       </header>
 
       <Options id="known-customers" values={customerOptions} />
-      <Options id="known-products" values={productOptions} />
       <Options id="known-positions" values={known.positions} />
-      <Options id="known-neck-types" values={known.neckTypes} />
-      <Options id="size-tags" values={SIZE_TAGS} />
+      <Options id="known-cut-types" values={known.cutTypes} />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext
@@ -469,21 +572,38 @@ function ItemTable({
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {['#', ...visible.map((key) => COLUMN_LABELS[key]), ''].map(
-                    (heading, index) => (
+                  {['#', ...headings, ''].map((heading, index) => (
                       <th
                         key={`${heading}-${index}`}
                         className="border-b border-slate-200 px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500"
                       >
                         {heading}
                       </th>
-                    ),
-                  )}
+                    ))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, index) => (
                   <SortableRow key={row.key} id={row.key} index={index}>
+                    {showTypeColumn ? (
+                      <td className="w-40">
+                        <Select
+                          value={row.productTypeId === null ? '' : String(row.productTypeId)}
+                          onChange={(event) =>
+                            onUpdate(row.key, {
+                              productTypeId: event.target.value === '' ? null : Number(event.target.value),
+                            })
+                          }
+                        >
+                          <option value="">— none —</option>
+                          {productTypes.map((type) => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </td>
+                    ) : null}
                     {visible.includes('name') ? (
                       <td>
                         <TextInput
@@ -513,35 +633,46 @@ function ItemTable({
                         />
                       </td>
                     ) : null}
-                    {visible.includes('neckType') ? (
-                      <td className="w-40">
+                    {visible.includes('cutType') ? (
+                      <td className="w-44">
                         <TextInput
-                          list="known-neck-types"
-                          value={row.neckType}
-                          onChange={(event) => onUpdate(row.key, { neckType: event.target.value })}
-                          placeholder="Round Neck"
+                          list="known-cut-types"
+                          value={row.cutType}
+                          onChange={(event) => onUpdate(row.key, { cutType: event.target.value })}
+                          placeholder="Jersey Standard"
                         />
                       </td>
                     ) : null}
                     {visible.includes('tag') ? (
                       <td className="w-36">
-                        <TextInput
-                          list="size-tags"
+                        <Select
                           value={row.tag}
                           onChange={(event) => onUpdate(row.key, { tag: event.target.value })}
-                          placeholder="Large"
-                        />
+                        >
+                          <option value="">—</option>
+                          {tagOptions(row.tag).map((tag) => (
+                            <option key={tag} value={tag}>
+                              {tag}
+                            </option>
+                          ))}
+                        </Select>
                       </td>
                     ) : null}
                     {visible.includes('label') ? (
                       <td className="w-24">
-                        <TextInput
+                        <Select
                           value={row.label}
                           onChange={(event) => onUpdate(row.key, { label: event.target.value })}
-                          title="Auto-filled from the tag, and refreshed whenever the tag changes."
+                          title="Filled in from the tag, and refreshed whenever the tag changes."
                           className="text-center font-semibold uppercase"
-                          placeholder="L"
-                        />
+                        >
+                          <option value="">—</option>
+                          {labelOptions(row.label).map((label) => (
+                            <option key={label} value={label}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
                       </td>
                     ) : null}
                     {visible.includes('notes') ? (

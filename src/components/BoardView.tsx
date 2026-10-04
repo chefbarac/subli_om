@@ -24,6 +24,8 @@ interface BoardViewProps {
   stages: Stage[];
   orders: Order[];
   itemCounts: Map<number, number>;
+  /** Order id -> comma separated product type names, for the card subtitle. */
+  productTypeNames: Map<number, string>;
   onOpenOrder: (orderId: number) => void;
   onMoveStage: (orderId: number, stageId: number) => void;
   onNewOrder: (stageId: number) => void;
@@ -33,6 +35,7 @@ export function BoardView({
   stages,
   orders,
   itemCounts,
+  productTypeNames,
   onOpenOrder,
   onMoveStage,
   onNewOrder,
@@ -101,6 +104,7 @@ export function BoardView({
             stage={stage}
             orders={ordersByStage.get(stage.id) ?? []}
             itemCounts={itemCounts}
+            productTypeNames={productTypeNames}
             onOpenOrder={onOpenOrder}
             onNewOrder={onNewOrder}
           />
@@ -109,7 +113,12 @@ export function BoardView({
 
       <DragOverlay>
         {activeOrder ? (
-          <OrderCardContent order={activeOrder} itemCount={itemCounts.get(activeOrder.id) ?? 0} overlay />
+          <OrderCardContent
+            order={activeOrder}
+            itemCount={itemCounts.get(activeOrder.id) ?? 0}
+            productLabel={productTypeNames.get(activeOrder.id) ?? ''}
+            overlay
+          />
         ) : null}
       </DragOverlay>
     </DndContext>
@@ -120,12 +129,14 @@ function StageColumn({
   stage,
   orders,
   itemCounts,
+  productTypeNames,
   onOpenOrder,
   onNewOrder,
 }: {
   stage: Stage;
   orders: Order[];
   itemCounts: Map<number, number>;
+  productTypeNames: Map<number, string>;
   onOpenOrder: (orderId: number) => void;
   onNewOrder: (stageId: number) => void;
 }) {
@@ -158,6 +169,7 @@ function StageColumn({
               key={order.id}
               order={order}
               itemCount={itemCounts.get(order.id) ?? 0}
+              productLabel={productTypeNames.get(order.id) ?? ''}
               tone={tone}
               onOpen={() => onOpenOrder(order.id)}
             />
@@ -181,11 +193,13 @@ function StageColumn({
 function DraggableCard({
   order,
   itemCount,
+  productLabel,
   tone,
   onOpen,
 }: {
   order: Order;
   itemCount: number;
+  productLabel: string;
   tone: StageTone;
   onOpen: () => void;
 }) {
@@ -208,7 +222,7 @@ function DraggableCard({
           order.isCompleted ? 'opacity-60' : ''
         }`}
       >
-        <OrderCardContent order={order} itemCount={itemCount} />
+        <OrderCardContent order={order} itemCount={itemCount} productLabel={productLabel} />
       </button>
     </div>
   );
@@ -217,10 +231,12 @@ function DraggableCard({
 function OrderCardContent({
   order,
   itemCount,
+  productLabel,
   overlay = false,
 }: {
   order: Order;
   itemCount: number;
+  productLabel: string;
   overlay?: boolean;
 }) {
   return (
@@ -240,8 +256,8 @@ function OrderCardContent({
         {order.customerName || 'Unnamed customer'}
       </p>
 
-      {order.product ? (
-        <p className="truncate text-xs text-slate-500">{order.product}</p>
+      {productLabel ? (
+        <p className="truncate text-xs text-slate-500">{productLabel}</p>
       ) : null}
 
       {order.description ? (

@@ -19,6 +19,7 @@ export const SIZE_PAIRINGS: readonly SizePairing[] = [
 ];
 
 export const SIZE_TAGS: string[] = SIZE_PAIRINGS.map((size) => size.tag);
+export const SIZE_LABELS: string[] = SIZE_PAIRINGS.map((size) => size.label);
 
 /**
  * Tag spellings used before the pairing was fixed, kept so older orders keep

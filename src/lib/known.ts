@@ -1,11 +1,10 @@
-import { cleanText } from './normalize';
+import { cleanText, uniqueNames } from './normalize';
 import type { Order, OrderItem } from '@/types';
 
 export interface KnownValues {
   customers: string[];
-  products: string[];
   positions: string[];
-  neckTypes: string[];
+  cutTypes: string[];
 }
 
 const MAX_SUGGESTIONS = 40;
@@ -28,12 +27,20 @@ function tally(values: string[]): string[] {
     .map((entry) => entry.label);
 }
 
-export function collectKnownValues(orders: Order[], items: OrderItem[]): KnownValues {
+export function collectKnownValues(
+  orders: Order[],
+  items: OrderItem[],
+  configuredCutTypes: string[] = [],
+): KnownValues {
   return {
     customers: tally(orders.map((order) => order.customerName)),
-    products: tally(orders.map((order) => order.product)),
     positions: tally(items.map((item) => item.position)),
-    neckTypes: tally(items.map((item) => item.neckType)),
+    // The Settings list comes first because those are the sanctioned values;
+    // anything typed by hand since is appended so it still gets offered.
+    cutTypes: uniqueNames([
+      ...configuredCutTypes,
+      ...tally(items.map((item) => item.cutType)),
+    ]),
   };
 }
 

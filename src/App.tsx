@@ -7,7 +7,6 @@ import { OrderEditor } from '@/components/OrderEditor';
 import { PriorityPanel } from '@/components/PriorityPanel';
 import { SettingsView } from '@/components/SettingsView';
 import { Button, TextInput } from '@/components/ui';
-import { exportOrdersCsv } from '@/lib/csv';
 import { todayISO } from '@/lib/dates';
 import { usePersistentState } from '@/lib/storage';
 import { useApp } from '@/state/AppProvider';
@@ -29,6 +28,21 @@ export function App() {
     moveOrderStage,
     deleteOrderById,
   } = useApp();
+
+  const productTypes = data.productTypes;
+
+  const productTypeNames = useMemo(() => {
+    const nameById = new Map(productTypes.map((type) => [type.id, type.name]));
+    const out = new Map<number, string>();
+    for (const order of data.orders) {
+      const label = order.productTypeIds
+        .map((id) => nameById.get(id))
+        .filter((name): name is string => Boolean(name))
+        .join(', ');
+      if (label) out.set(order.id, label);
+    }
+    return out;
+  }, [data.orders, productTypes]);
 
   const [view, setView] = usePersistentState<ViewMode>('view', 'board', (raw) =>
     raw === 'board' || raw === 'calendar' ? raw : 'board',
@@ -67,8 +81,17 @@ export function App() {
       if (
         order.customerName.toLowerCase().includes(term) ||
         order.orderNo.toLowerCase().includes(term) ||
-        order.description.toLowerCase().includes(term) ||
-        order.product.toLowerCase().includes(term)
+        order.description.toLowerCase().includes(term)
+      ) {
+        return true;
+      }
+
+      if (
+        order.productTypeIds.some((id) =>
+          productTypes.some(
+            (type) => type.id === id && type.name.toLowerCase().includes(term),
+          ),
+        )
       ) {
         return true;
       }
@@ -80,7 +103,7 @@ export function App() {
           item.position.toLowerCase().includes(term),
       );
     });
-  }, [data.orders, includeCompleted, itemsByOrder, overdueOnly, search]);
+  }, [data.orders, includeCompleted, itemsByOrder, overdueOnly, productTypes, search]);
 
   const stats = useMemo(() => {
     const today = todayISO();
@@ -100,7 +123,7 @@ export function App() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-500">
-        Opening local database…
+        Opening local databaseâ€¦
       </div>
     );
   }
@@ -142,7 +165,7 @@ export function App() {
         <TextInput
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search customer, order no, or a name…"
+          placeholder="Search customer, order no, or a nameâ€¦"
           className="w-64"
         />
 
@@ -183,20 +206,6 @@ export function App() {
             ) : null}
           </span>
 
-          <Button
-            onClick={() =>
-              exportOrdersCsv(
-                visibleOrders,
-                data.items,
-                data.settings,
-                `subli_om-orders-${todayISO()}.csv`,
-              )
-            }
-            disabled={visibleOrders.length === 0}
-          >
-            Export CSV
-          </Button>
-
           <Button onClick={() => setSettingsOpen(true)}>Settings</Button>
 
           <Button
@@ -225,6 +234,7 @@ export function App() {
               stages={activeStages}
               orders={visibleOrders}
               itemCounts={itemCounts}
+              productTypeNames={productTypeNames}
               onOpenOrder={(orderId) => setEditor({ orderId, stageId: 0 })}
               onMoveStage={(orderId, stageId) => void moveOrderStage(orderId, stageId)}
               onNewOrder={(stageId) => setEditor({ orderId: null, stageId })}
@@ -256,6 +266,7 @@ export function App() {
           order={sheet.order}
           items={sheet.items}
           settings={data.settings}
+          productTypes={data.productTypes}
           onClose={() => setSheet(null)}
         />
       ) : null}
@@ -264,7 +275,7 @@ export function App() {
 
       {data.orders.length === 0 && view === 'board' ? (
         <div className="pointer-events-none fixed bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-full bg-slate-900/85 px-4 py-2 text-xs font-semibold text-white shadow-lg">
-          No orders yet — click <span className="text-brand-300">+ New order</span> to create the
+          No orders yet â€” click <span className="text-brand-300">+ New order</span> to create the
           first one. Everything is saved in this browser.
         </div>
       ) : null}

@@ -16,12 +16,23 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
     data,
     updateSettings,
     saveStageList,
+    saveLists,
     exportBackup,
     importBackup,
     loadDemoOrders,
     deleteAllOrders,
     resetAll,
   } = useApp();
+
+  const [productTypes, setProductTypes] = useState(data.productTypes);
+  const [cutTypes, setCutTypes] = useState(data.cutTypes);
+  const [listsDirty, setListsDirty] = useState(false);
+
+  // The two lists share one Save button, mirroring how Stages behaves.
+  async function handleSaveLists() {
+    await saveLists(productTypes, cutTypes);
+    setListsDirty(false);
+  }
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,6 +74,44 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
         />
 
         <SizePairingSection />
+
+        <NameListSection
+          title="Product types"
+          description="What an order can be made of. Tick the ones an order includes; the job sheet prints one table per product type."
+          rows={productTypes}
+          onChange={(next) => {
+            setProductTypes(next);
+            setListsDirty(true);
+          }}
+        />
+
+        <NameListSection
+          title="Cut types"
+          description="Offered as suggestions in the Cut Type column. The column stays free text, so a one-off style can still be typed."
+          rows={cutTypes}
+          onChange={(next) => {
+            setCutTypes(next);
+            setListsDirty(true);
+          }}
+        />
+
+        {listsDirty ? (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setProductTypes(data.productTypes);
+                setCutTypes(data.cutTypes);
+                setListsDirty(false);
+              }}
+            >
+              Discard changes
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => void handleSaveLists()}>
+              Save product types and cut types
+            </Button>
+          </div>
+        ) : null}
 
         <KnownValuesSection />
 
@@ -291,14 +340,109 @@ function SizePairingSection() {
   );
 }
 
+interface NameRow {
+  id: number;
+  name: string;
+  sortOrder: number;
+}
+
+function NameListSection({
+  title,
+  description,
+  rows,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  rows: NameRow[];
+  onChange: (rows: NameRow[]) => void;
+}) {
+  const nextId = useRef(Math.max(0, ...rows.map((row) => row.id)) + 1);
+
+  function rename(id: number, name: string) {
+    onChange(rows.map((row) => (row.id === id ? { ...row, name } : row)));
+  }
+
+  function move(index: number, delta: number) {
+    const target = index + delta;
+    if (target < 0 || target >= rows.length) return;
+    const next = [...rows];
+    const [row] = next.splice(index, 1);
+    next.splice(target, 0, row);
+    onChange(next.map((entry, position) => ({ ...entry, sortOrder: position })));
+  }
+
+  function remove(id: number) {
+    onChange(
+      rows
+        .filter((row) => row.id !== id)
+        .map((entry, position) => ({ ...entry, sortOrder: position })),
+    );
+  }
+
+  function add() {
+    const id = nextId.current;
+    nextId.current += 1;
+    onChange([...rows, { id, name: '', sortOrder: rows.length }]);
+  }
+
+  return (
+    <section>
+      <h3 className="mb-1 text-sm font-bold text-slate-800">{title}</h3>
+      <p className="mb-2 text-xs text-slate-500">{description}</p>
+
+      <div className="space-y-1.5">
+        {rows.map((row, index) => (
+          <div key={row.id} className="flex items-center gap-1.5">
+            <span className="flex shrink-0 flex-col">
+              <button
+                type="button"
+                aria-label={`Move ${row.name || 'entry'} up`}
+                disabled={index === 0}
+                onClick={() => move(index, -1)}
+                className="text-slate-400 hover:text-slate-700 disabled:opacity-30"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                aria-label={`Move ${row.name || 'entry'} down`}
+                disabled={index === rows.length - 1}
+                onClick={() => move(index, 1)}
+                className="text-slate-400 hover:text-slate-700 disabled:opacity-30"
+              >
+                ▼
+              </button>
+            </span>
+
+            <TextInput
+              value={row.name}
+              onChange={(event) => rename(row.id, event.target.value)}
+              placeholder={`${title.replace(/s$/, '')} name`}
+            />
+
+            <Button size="sm" onClick={() => remove(row.id)} title="Remove">
+              ✕
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-2">
+        <Button size="sm" onClick={add}>
+          + Add {title.replace(/s$/, '').toLowerCase()}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 function KnownValuesSection() {
   const { known } = useApp();
 
   const groups: Array<[string, string[]]> = [
     ['Customers', known.customers],
-    ['Products', known.products],
     ['Positions', known.positions],
-    ['Neck types', known.neckTypes],
   ];
 
   const empty = groups.every(([, values]) => values.length === 0);

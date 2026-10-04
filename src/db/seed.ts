@@ -1,11 +1,11 @@
-﻿import { addDays, format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { normalizeColumns } from '@/lib/normalize';
 import { labelForTag } from '@/lib/sizes';
 import { type ColumnKey } from '@/types';
 import type { AppData, Order, OrderItem, Settings } from '@/types';
 
 export const DB_NAME = 'subli_om';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const SETTINGS_VERSION = 2;
 
@@ -30,6 +30,31 @@ export const DEFAULT_STAGES = [
   'For Heatpress',
 ];
 
+export const DEFAULT_PRODUCT_TYPES = [
+  'Jersey Set',
+  'Jersey Upper',
+  'Jersey Lower',
+  'Polo Shirt',
+  'T-Shirt',
+  'Long Sleeve',
+  'Jacket',
+];
+
+export const DEFAULT_CUT_TYPES = [
+  'Jersey Standard',
+  'Jersey NBA',
+  'Jersey Amboy',
+  'Polo Zipper',
+  'Polo Button',
+  'Chinese Collar',
+  'T-Shirt Round-neck',
+  'T-Shirt V-neck',
+];
+
+function toList(names: string[]): { name: string; sortOrder: number }[] {
+  return names.map((name, index) => ({ name, sortOrder: index }));
+}
+
 export function buildSeedData(): AppData {
   const stages = DEFAULT_STAGES.map((name, index) => ({
     id: index + 1,
@@ -42,6 +67,8 @@ export function buildSeedData(): AppData {
     orders: [],
     items: [],
     stages,
+    productTypes: toList(DEFAULT_PRODUCT_TYPES).map((entry, index) => ({ id: index + 1, ...entry })),
+    cutTypes: toList(DEFAULT_CUT_TYPES).map((entry, index) => ({ id: index + 1, ...entry })),
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -95,7 +122,16 @@ const POSITION_CYCLE = [
   'Staff',
 ];
 
-const NECK_CYCLE = ['Round Neck', 'V Neck', 'Polo Collar', 'Mandarin'];
+const CUT_CYCLE = [
+  'Jersey Standard',
+  'Jersey NBA',
+  'Jersey Amboy',
+  'Polo Zipper',
+  'Polo Button',
+  'Chinese Collar',
+  'T-Shirt Round-neck',
+  'T-Shirt V-neck',
+];
 
 const NOTE_CYCLE = ['', '', 'Name on front', 'Number on back only', 'Long sleeve'];
 
@@ -103,14 +139,16 @@ interface DemoPerson {
   name: string;
   jerseyNo: string;
   position: string;
-  neckType: string;
+  cutType: string;
   tag: string;
   notes: string;
+  productTypeIndex: number;
 }
 
 interface DemoSpec {
   customer: string;
-  product: string;
+  /** Names from DEFAULT_PRODUCT_TYPES. More than one makes the sheet split. */
+  products: string[];
   description: string;
   stageIndex: number;
   dueOffsetDays: number | null;
@@ -125,18 +163,18 @@ const ALL_COLUMNS: ColumnKey[] = [
   'name',
   'jerseyNo',
   'position',
-  'neckType',
+  'cutType',
   'tag',
   'label',
   'notes',
 ];
-const JERSEY_COLUMNS: ColumnKey[] = ['name', 'jerseyNo', 'tag', 'label', 'notes'];
-const UNIFORM_COLUMNS: ColumnKey[] = ['name', 'position', 'neckType', 'tag', 'label', 'notes'];
+const JERSEY_COLUMNS: ColumnKey[] = ['name', 'jerseyNo', 'cutType', 'tag', 'label', 'notes'];
+const UNIFORM_COLUMNS: ColumnKey[] = ['name', 'position', 'cutType', 'tag', 'label', 'notes'];
 
 const DEMO_SPECS: DemoSpec[] = [
   {
     customer: 'Muscat Sports Club',
-    product: 'Football jersey, full sublimation',
+    products: ['Jersey Set'],
     description: '18 players. Front crest, back name and number. Navy with gold trim.',
     stageIndex: 0,
     dueOffsetDays: 9,
@@ -146,7 +184,7 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Al Amerat School',
-    product: 'House t-shirt, full sublimation',
+    products: ['T-Shirt'],
     description: '30 students, white with red side panel. Names across the back.',
     stageIndex: 1,
     dueOffsetDays: 4,
@@ -156,7 +194,7 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Oman Petroleum Club',
-    product: 'Basketball jersey, full sublimation',
+    products: ['Jersey Set'],
     description: '12 players. Yellow with black number, no name on front.',
     stageIndex: 2,
     dueOffsetDays: 2,
@@ -167,8 +205,8 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Qurum Housing Company',
-    product: 'Safety vest, heat transfer logo',
-    description: '8 vests for site staff. Logo on back and left chest.',
+    products: ['Jacket'],
+    description: '8 site jackets. Logo on back and left chest, heat transfer.',
     stageIndex: 3,
     dueOffsetDays: 1,
     count: 8,
@@ -178,7 +216,7 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Salalah Port Authority',
-    product: 'Polo shirt, embroidery',
+    products: ['Polo Shirt'],
     description: '20 staff polos. Left chest logo, name on right chest.',
     stageIndex: 2,
     dueOffsetDays: -3,
@@ -189,8 +227,8 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Al Khuwair Cafeteria',
-    product: 'Menu cover and staff apron',
-    description: '4 aprons plus one menu board. Bring before opening hours.',
+    products: ['Polo Shirt'],
+    description: '4 staff polos plus one menu board. Bring before opening hours.',
     stageIndex: 0,
     dueOffsetDays: 16,
     count: 4,
@@ -200,7 +238,7 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Barka Mall Sports Academy',
-    product: 'Training kit, jersey and shorts',
+    products: ['Jersey Upper', 'Jersey Lower'],
     description: '16 players aged 9 to 12. Two colour sets, one design.',
     stageIndex: 1,
     dueOffsetDays: 6,
@@ -211,8 +249,8 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Ibri Municipality',
-    product: 'Event staff vest, full sublimation',
-    description: '10 volunteers for the heritage week. Green vest, white text.',
+    products: ['T-Shirt'],
+    description: '10 volunteers for the heritage week. Green shirt, white text.',
     stageIndex: 3,
     dueOffsetDays: -1,
     count: 10,
@@ -222,8 +260,8 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Nizwa Date Festival Stall',
-    product: 'Apron and cap, sublimation',
-    description: '3 stall staff. Logo large on apron, small on cap.',
+    products: ['Polo Shirt'],
+    description: '3 stall staff. Logo large on the chest.',
     stageIndex: 2,
     dueOffsetDays: 11,
     count: 3,
@@ -233,8 +271,8 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Muscat Golf Club',
-    product: 'Cap with embroidered logo',
-    description: '6 caps. Embroider club crest on the front.',
+    products: ['Polo Shirt'],
+    description: '6 polos. Embroider club crest on the chest.',
     stageIndex: 1,
     dueOffsetDays: 21,
     count: 6,
@@ -244,8 +282,8 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Sohar Aluminium',
-    product: 'Gift mug, dye sublimation',
-    description: '5 mugs for the annual dinner. Quote to be agreed, no due date yet.',
+    products: ['Long Sleeve'],
+    description: '5 long sleeves for the annual dinner. Quote to be agreed, no due date yet.',
     stageIndex: 0,
     dueOffsetDays: null,
     count: 5,
@@ -255,7 +293,7 @@ const DEMO_SPECS: DemoSpec[] = [
   },
   {
     customer: 'Rustaq Football Team',
-    product: 'Away kit, full sublimation',
+    products: ['Jersey Set'],
     description: '14 players, orange away kit. Delivered last week.',
     stageIndex: 3,
     dueOffsetDays: -6,
@@ -275,14 +313,16 @@ function buildPeople(spec: DemoSpec): DemoPerson[] {
         ? String(((index * 7 + offset) % 30) + 1)
         : '',
     position: POSITION_CYCLE[index % POSITION_CYCLE.length],
-    neckType: NECK_CYCLE[index % NECK_CYCLE.length],
+    cutType: CUT_CYCLE[index % CUT_CYCLE.length],
     tag: spec.sizes[index % spec.sizes.length],
     notes: NOTE_CYCLE[index % NOTE_CYCLE.length],
+    productTypeIndex: spec.products.length > 1 ? index % spec.products.length : 0,
   }));
 }
 
 export function buildDemoOrders(): { orders: Order[]; items: OrderItem[] } {
   const base = buildSeedData();
+  const productTypeIdByName = new Map(base.productTypes.map((type) => [type.name, type.id]));
 
   const today = new Date();
   const year = today.getFullYear();
@@ -302,7 +342,9 @@ export function buildDemoOrders(): { orders: Order[]; items: OrderItem[] } {
           ? null
           : format(addDays(today, spec.dueOffsetDays), 'yyyy-MM-dd'),
       stageId: base.stages[spec.stageIndex].id,
-      product: spec.product,
+      productTypeIds: spec.products
+        .map((name) => productTypeIdByName.get(name))
+        .filter((value): value is number => value !== undefined),
       columns: normalizeColumns(spec.columns),
       isCompleted: spec.completed ?? false,
       createdAt,
@@ -323,10 +365,11 @@ export function buildDemoOrders(): { orders: Order[]; items: OrderItem[] } {
         name: person.name,
         jerseyNo: person.jerseyNo,
         position: person.position,
-        neckType: person.neckType,
+        cutType: person.cutType,
         tag: person.tag,
         label: labelForTag(person.tag),
         notes: person.notes,
+        productTypeId: order.productTypeIds[person.productTypeIndex] ?? null,
       });
       itemId += 1;
     }

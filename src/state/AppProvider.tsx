@@ -1,4 +1,4 @@
-﻿import {
+import {
   createContext,
   useCallback,
   useContext,
@@ -18,6 +18,7 @@ import {
   putStages,
   removeOrder,
   replaceAll,
+  replaceLists,
   replaceOrders,
   saveSettings,
   seedIfEmpty,
@@ -28,6 +29,8 @@ import { nextOrderNo } from '@/lib/orderNo';
 import {
   cleanSettings,
   cleanStageList,
+  cleanProductTypeList,
+  cleanCutTypeList,
   cleanText,
 } from '@/lib/normalize';
 import { labelForTag } from '@/lib/sizes';
@@ -35,10 +38,12 @@ import { downloadTextFile } from '@/lib/csv';
 import type {
   AppData,
   BackupFile,
+  CutType,
   ItemDraft,
   Order,
   OrderDraft,
   OrderItem,
+  ProductType,
   Settings,
   Stage,
 } from '@/types';
@@ -62,6 +67,7 @@ interface AppContextValue {
   deleteOrderById: (orderId: number) => Promise<void>;
   updateSettings: (settings: Settings) => Promise<void>;
   saveStageList: (stages: Stage[]) => Promise<void>;
+  saveLists: (productTypes: ProductType[], cutTypes: CutType[]) => Promise<void>;
   exportBackup: () => void;
   importBackup: (file: File) => Promise<void>;
   loadDemoOrders: () => Promise<void>;
@@ -72,19 +78,9 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const EMPTY: AppData = {
-  orders: [],
-  items: [],
-  stages: [],
-  settings: buildSeedData().settings,
-};
+const EMPTY: AppData = { ...buildSeedData(), orders: [], items: [], stages: [] };
 
-const EMPTY_KNOWN: KnownValues = {
-  customers: [],
-  products: [],
-  positions: [],
-  neckTypes: [],
-};
+const EMPTY_KNOWN: KnownValues = { customers: [], positions: [], cutTypes: [] };
 
 function normalizeRow(row: EditableRow): ItemDraft {
   const tag = cleanText(row.tag);
@@ -92,10 +88,11 @@ function normalizeRow(row: EditableRow): ItemDraft {
     name: cleanText(row.name),
     jerseyNo: cleanText(row.jerseyNo),
     position: cleanText(row.position),
-    neckType: cleanText(row.neckType),
+    cutType: cleanText(row.cutType),
     tag,
     label: cleanText(row.label) || labelForTag(tag),
     notes: cleanText(row.notes),
+    productTypeId: row.productTypeId ?? null,
   };
 }
 
@@ -169,12 +166,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [data.orders],
   );
 
+  const configuredCutTypes = useMemo(
+    () => data.cutTypes.map((type) => type.name),
+    [data.cutTypes],
+  );
+
   const known = useMemo(
     () =>
       data.orders.length === 0 && data.items.length === 0
         ? EMPTY_KNOWN
-        : collectKnownValues(data.orders, data.items),
-    [data.items, data.orders],
+        : collectKnownValues(data.orders, data.items, configuredCutTypes),
+    [configuredCutTypes, data.items, data.orders],
   );
 
   const suggestOrderNo = useCallback(
@@ -190,7 +192,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...draft,
         orderNo: cleanText(draft.orderNo),
         customerName: cleanText(draft.customerName),
-        product: cleanText(draft.product),
         description: cleanText(draft.description),
       };
 
@@ -284,10 +285,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [reload],
   );
 
+  const saveLists = useCallback(
+    async (productTypes: ProductType[], cutTypes: CutType[]) => {
+      await replaceLists(cleanProductTypeList(productTypes), cleanCutTypeList(cutTypes));
+      await reload();
+    },
+    [reload],
+  );
+
   const exportBackup = useCallback(() => {
     const payload: BackupFile = {
       app: 'subli_om',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       data,
     };
@@ -345,6 +354,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteOrderById,
       updateSettings,
       saveStageList,
+      saveLists,
       exportBackup,
       importBackup,
       loadDemoOrders,
@@ -371,6 +381,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       resetAll,
       saveOrder,
       saveStageList,
+      saveLists,
       setOrderCompleted,
       stageById,
       suggestOrderNo,

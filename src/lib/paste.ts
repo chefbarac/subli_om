@@ -2,7 +2,8 @@ import { cleanText } from './normalize';
 import { labelForTag } from './sizes';
 import type { ItemDraft } from '@/types';
 
-type DraftKey = keyof ItemDraft;
+// Product type is chosen from this order's list, never pasted as a cell.
+type DraftKey = Exclude<keyof ItemDraft, 'productTypeId'>;
 
 const COLUMN_ALIASES: Record<DraftKey, string[]> = {
   name: ['name', 'names', 'player', 'playername', 'customername', 'fullname'],
@@ -18,7 +19,7 @@ const COLUMN_ALIASES: Record<DraftKey, string[]> = {
     'backnumber',
   ],
   position: ['position', 'role', 'rank', 'post', 'designation'],
-  neckType: ['neck', 'necktype', 'neckline', 'collar', 'collartype'],
+  cutType: ['cuttype', 'cut', 'neck', 'necktype', 'neckline', 'collar', 'collartype'],
   tag: ['tag', 'size', 'cloth', 'clothes', 'clothe', 'garment', 'clothsize'],
   label: ['label', 'abbr', 'abbreviation', 'short', 'code', 'sizeabbr'],
   notes: ['notes', 'note', 'comment', 'comments', 'remarks', 'remark'],
@@ -100,7 +101,8 @@ export function parsePastedNames(text: string): PasteResult {
       name: '',
       jerseyNo: '',
       position: '',
-      neckType: '',
+      cutType: '',
+      productTypeId: null,
       tag: '',
       label: '',
       notes: '',

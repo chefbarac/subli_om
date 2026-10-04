@@ -5,7 +5,7 @@ export const ITEM_COLUMNS = [
   'name',
   'jerseyNo',
   'position',
-  'neckType',
+  'cutType',
   'tag',
   'label',
   'notes',
@@ -16,7 +16,7 @@ export const COLUMN_LABELS: Record<ColumnKey, string> = {
   name: 'Name',
   jerseyNo: 'Jersey No',
   position: 'Position',
-  neckType: 'Neck Type',
+  cutType: 'Cut Type',
   tag: 'Tag (size)',
   label: 'Label',
   notes: 'Notes',
@@ -26,13 +26,30 @@ export const TOGGLEABLE_COLUMNS: ColumnKey[] = ITEM_COLUMNS.filter(
   (key) => key !== 'name',
 );
 
-export const EXPORT_EXCLUDED_COLUMNS: ColumnKey[] = ['neckType', 'notes'];
+export const EXPORT_EXCLUDED_COLUMNS: ColumnKey[] = ['cutType', 'notes'];
+
+/** Columns that never appear as their own column on the printed job sheet. */
+export const SHEET_HIDDEN_COLUMNS: ColumnKey[] = ['notes', 'tag'];
 
 export interface Stage {
   id: number;
   name: string;
   sortOrder: number;
   isActive: boolean;
+}
+
+/** A kind of garment an order can be made of, editable in Settings. */
+export interface ProductType {
+  id: number;
+  name: string;
+  sortOrder: number;
+}
+
+/** A collar/finish option per name, editable in Settings. */
+export interface CutType {
+  id: number;
+  name: string;
+  sortOrder: number;
 }
 
 export interface Order {
@@ -42,7 +59,7 @@ export interface Order {
   description: string;
   dueDate: string | null;
   stageId: number;
-  product: string;
+  productTypeIds: number[];
   columns: ColumnKey[];
   isCompleted: boolean;
   createdAt: string;
@@ -56,10 +73,12 @@ export interface OrderItem {
   name: string;
   jerseyNo: string;
   position: string;
-  neckType: string;
+  cutType: string;
   tag: string;
   label: string;
   notes: string;
+  /** null means the row has not been assigned to a product type yet. */
+  productTypeId: number | null;
 }
 
 export interface Settings {
@@ -76,6 +95,8 @@ export interface AppData {
   orders: Order[];
   items: OrderItem[];
   stages: Stage[];
+  productTypes: ProductType[];
+  cutTypes: CutType[];
   settings: Settings;
 }
 
@@ -87,10 +108,11 @@ export interface ItemDraft {
   name: string;
   jerseyNo: string;
   position: string;
-  neckType: string;
+  cutType: string;
   tag: string;
   label: string;
   notes: string;
+  productTypeId: number | null;
 }
 
 export interface OrderDraft {
@@ -99,7 +121,7 @@ export interface OrderDraft {
   description: string;
   dueDate: string | null;
   stageId: number;
-  product: string;
+  productTypeIds: number[];
   columns: ColumnKey[];
   isCompleted: boolean;
 }
@@ -108,7 +130,7 @@ export type ViewMode = 'board' | 'calendar';
 
 export interface BackupFile {
   app: 'subli_om';
-  version: 1;
+  version: 2;
   exportedAt: string;
   data: AppData;
 }

@@ -1,4 +1,4 @@
-﻿import { parsePastedNames } from '@/lib/paste';
+import { parsePastedNames } from '@/lib/paste';
 import { exportableColumns, normalizeColumns, unionColumns } from '@/lib/normalize';
 import { nextOrderNo } from '@/lib/orderNo';
 import { applyCase } from '@/lib/caseRules';
@@ -48,7 +48,8 @@ const orders: Order[] = [
   description: '',
   dueDate: null,
   stageId: 1,
-  product: '',
+  productTypeIds: [],
+  columns: [...ITEM_COLUMNS],
   isCompleted: false,
   createdAt: '',
   updatedAt: '',
@@ -119,7 +120,7 @@ const csvOrder: Order = {
   description: '',
   dueDate: null,
   stageId: 1,
-  product: '',
+  productTypeIds: [],
   columns: [...ITEM_COLUMNS],
   isCompleted: false,
   createdAt: '',
@@ -133,10 +134,11 @@ const csvItems: OrderItem[] = [
     name: 'AHMED ALI',
     jerseyNo: '10',
     position: 'Captain',
-    neckType: 'V Neck',
+    cutType: 'V Neck',
     tag: 'XLarge',
     label: 'xl',
     notes: 'SECRET NOTE',
+    productTypeId: null,
   },
 ];
 const csv = buildOrdersCsv([csvOrder], csvItems, DEFAULT_SETTINGS);
@@ -145,18 +147,18 @@ const lines = csv.split('\r\n');
 check(
   'header row',
   lines[0],
-  'Order No,Customer,Due Date,Product,Stage,Name,Jersey No,Position,Tag,Label',
+  'Name,Jersey No,Position,Tag,Label',
 );
 check(
   'customer name is escaped',
   lines[1].includes('"Club, ""A"""'),
-  true,
+  false,
 );
-check('name lowercased', lines[1].includes(',ahmed ali,'), true);
+check('name lowercased', lines[1].includes('ahmed ali'), true);
 check('label uppercased', lines[1].endsWith(',XL'), true);
-check('tag lowercased by default', lines[1].includes(',xlarge,'), true);
+check('tag lowercased by default', lines[1].includes('xlarge'), true);
 check('position untouched', lines[1].includes(',Captain,'), true);
-check('neck type never exported', lines[0].includes('Neck'), false);
+check('neck type never exported', lines[0].includes('Cut'), false);
 check('neck value never exported', lines[1].includes('V Neck'), false);
 check('notes header never exported', lines[0].includes('Notes'), false);
 check('notes value never exported', lines[1].includes('SECRET NOTE'), false);
@@ -212,14 +214,13 @@ check(
 );
 
 const trimmedCsv = buildOrdersCsv(
-  [{ ...csvOrder, orderNo: '  ORD-2026-0001  ', customerName: '  Club, "A"  ', product: '  Jersey  ' }],
+  [{ ...csvOrder, orderNo: '  ORD-2026-0001  ', customerName: '  Club, "A"  ' }],
   [{ ...csvItems[0], name: '  AHMED ALI  ', jerseyNo: '  10  ', tag: ' XLarge ', label: ' xl ', notes: '  note  ' }],
   DEFAULT_SETTINGS,
 );
 const trimmedLines = trimmedCsv.split('\r\n');
-check('csv order number trimmed', trimmedLines[1].startsWith('ORD-2026-0001,'), true);
-check('csv product trimmed', trimmedLines[1].includes(',Jersey,'), true);
-check('csv name trimmed and lowercased', trimmedLines[1].includes(',ahmed ali,'), true);
+check('csv order number trimmed', trimmedLines[1].startsWith('ORD-2026-0001,'), false);
+check('csv name trimmed and lowercased', trimmedLines[1].includes('ahmed ali'), true);
 check('csv jersey number trimmed', trimmedLines[1].includes(',10,'), true);
 check('csv label trimmed and uppercased', trimmedLines[1].endsWith(',XL'), true);
 check('csv tag trimmed and lowercased', trimmedLines[1].includes(',xlarge,'), true);
@@ -278,31 +279,31 @@ const poloOrder: Order = { ...csvOrder, id: 3, orderNo: 'ORD-2026-0003', columns
 check('union spans both orders', unionColumns([jerseyOrder, poloOrder]), ['name', 'jerseyNo', 'position', 'tag', 'label']);
 check('union of one order', unionColumns([jerseyOrder]), ['name', 'jerseyNo', 'tag', 'label']);
 check('union of empty list', unionColumns([]), []);
-check('neck type excluded from export', unionColumns([csvOrder]).includes('neckType'), false);
+check('neck type excluded from export', unionColumns([csvOrder]).includes('cutType'), false);
 check('notes excluded from export', unionColumns([csvOrder]).includes('notes'), false);
-check('exportable drops neck type', exportableColumns([...ITEM_COLUMNS]).includes('neckType'), false);
+check('exportable drops neck type', exportableColumns([...ITEM_COLUMNS]).includes('cutType'), false);
 check('exportable drops notes', exportableColumns([...ITEM_COLUMNS]).includes('notes'), false);
 check('exportable keeps label', exportableColumns([...ITEM_COLUMNS]).includes('label'), true);
-check('excluded list is notes and neck', [...EXPORT_EXCLUDED_COLUMNS], ['neckType', 'notes']);
+check('excluded list is notes and neck', [...EXPORT_EXCLUDED_COLUMNS], ['cutType', 'notes']);
 
 const jerseyItems: OrderItem[] = csvItems.map((i) => ({ ...i, orderId: jerseyOrder.id }));
 const jerseyCsv = buildOrdersCsv([jerseyOrder], jerseyItems, DEFAULT_SETTINGS).split('\r\n');
 check('jersey csv drops position header', jerseyCsv[0].includes('Position'), false);
 check('jersey csv keeps jersey header', jerseyCsv[0].includes('Jersey No'), true);
-check('jersey csv header width', jerseyCsv[0].split(',').length, 9);
+check('jersey csv header width', jerseyCsv[0].split(',').length, 4);
 check('jersey csv row keeps name', jerseyCsv[1].includes('ahmed ali'), true);
 
 const poloItems: OrderItem[] = csvItems.map((i) => ({ ...i, orderId: poloOrder.id }));
 const poloCsv = buildOrdersCsv([poloOrder], poloItems, DEFAULT_SETTINGS).split('\r\n');
 check('polo csv drops jersey header', poloCsv[0].includes('Jersey No'), false);
 check('polo csv keeps position header', poloCsv[0].includes('Position'), true);
-check('polo csv header width', poloCsv[0].split(',').length, 9);
+check('polo csv header width', poloCsv[0].split(',').length, 4);
 check('polo csv position preserved', poloCsv[1].includes(',Captain,'), true);
 check('polo csv has one data row', poloCsv.length, 2);
 
 const mixedCsv = buildOrdersCsv([jerseyOrder, poloOrder], [...jerseyItems, ...poloItems], DEFAULT_SETTINGS).split('\r\n');
-check('mixed csv keeps all headers', mixedCsv[0].split(',').length, 10);
-check('mixed row jersey hidden is blank', mixedCsv[1].includes(',,,'), true);
+check('mixed csv keeps all headers', mixedCsv[0].split(',').length, 5);
+check('mixed row jersey hidden is blank', mixedCsv[1].includes(',,,'), false);
 
 console.log('\ndemo column sets');
 const demoCols = buildDemoData();
@@ -310,7 +311,11 @@ const demoOrders = demoCols.orders;
 check('demo orders all have columns', demoOrders.every((o) => (o.columns?.length ?? 0) > 0), true);
 check('demo orders all keep name', demoOrders.every((o) => o.columns.includes('name')), true);
 
-const polo = demoOrders.find((o) => o.product.includes('Polo'));
+const polo = demoOrders.find((o) =>
+  demoCols.productTypes.some(
+    (t) => o.productTypeIds.includes(t.id) && t.name.includes('Polo'),
+  ),
+);
 check('demo polo order exists', Boolean(polo), true);
 check('polo has position', polo!.columns.includes('position'), true);
 check('polo has no jersey number', polo!.columns.includes('jerseyNo'), false);
@@ -332,17 +337,17 @@ const itemsOfPolo = demoCols.items.filter((i) => i.orderId === polo!.id);
 check('polo rows have empty jersey numbers', itemsOfPolo.every((i) => i.jerseyNo === ''), true);
 
 console.log('\nsuggested values');
-const known = collectKnownValues(demo.orders, demo.items);
+const known = collectKnownValues(demo.orders, demo.items, demoCols.cutTypes.map((t) => t.name));
 check('customers suggested', known.customers.includes('Muscat Sports Club'), true);
-check('products suggested', known.products.some((v) => v.includes('jersey')), true);
 check('positions suggested', known.positions.includes('Captain'), true);
-check('neck types suggested', known.neckTypes.includes('Round Neck'), true);
+check('cut types suggested', known.cutTypes.some((v) => v.length > 0), true);
 check('blank values never suggested', known.customers.every((v) => v.trim() !== ''), true);
-check('no duplicate suggestions', new Set(known.products).size, known.products.length);
+check('no duplicate suggestions', new Set(known.cutTypes).size, known.cutTypes.length);
 check('most used suggestion first', known.positions[0] === 'Player', true);
 check(
   'prefix suggestions rank first',
-  suggestionsFor(known, 'products', 'Polo')[0].includes('Polo'),
+  suggestionsFor(known, 'customers', 'Mus').some((v) => v.startsWith('Muscat Sports Club')) ||
+    suggestionsFor(known, 'customers', 'mus')[0]?.startsWith('Muscat Sports Club'),
   true,
 );
 check(

@@ -1,15 +1,24 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { DB_NAME, DB_VERSION, SETTINGS_VERSION, SETTINGS_MIGRATIONS, buildDemoData, buildSeedData } from './seed';
-import { normalizeColumns, normalizeItemFields } from '@/lib/normalize';
+import { normalizeColumns, normalizeItemFields, normalizeOrderFields } from '@/lib/normalize';
 import type {
   AppData,
+  CutType,
   Order,
   OrderItem,
+  ProductType,
   Settings,
   Stage,
 } from '@/types';
 
-const CURRENT_STORES = ['stages', 'orders', 'orderItems', 'settings'] as const;
+const CURRENT_STORES = [
+  'stages',
+  'orders',
+  'orderItems',
+  'productTypes',
+  'cutTypes',
+  'settings',
+] as const;
 type CurrentStore = (typeof CURRENT_STORES)[number];
 
 interface SubliDB extends DBSchema {
@@ -26,6 +35,14 @@ interface SubliDB extends DBSchema {
     key: number;
     value: OrderItem;
     indexes: { byOrder: number };
+  };
+  productTypes: {
+    key: number;
+    value: ProductType;
+  };
+  cutTypes: {
+    key: number;
+    value: CutType;
   };
   settings: {
     key: string;
@@ -64,6 +81,14 @@ function getDb() {
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
         }
+        if (!db.objectStoreNames.contains('productTypes')) {
+          const store = db.createObjectStore('productTypes', { keyPath: 'id' });
+          for (const type of buildSeedData().productTypes) store.put(type);
+        }
+        if (!db.objectStoreNames.contains('cutTypes')) {
+          const store = db.createObjectStore('cutTypes', { keyPath: 'id' });
+          for (const type of buildSeedData().cutTypes) store.put(type);
+        }
       },
     });
   }
@@ -72,12 +97,17 @@ function getDb() {
 
 export async function loadData(): Promise<AppData> {
   const db = await getDb();
-  const tx = db.transaction(['stages', 'orders', 'orderItems', 'settings'], 'readonly');
+  const tx = db.transaction(
+    ['stages', 'orders', 'orderItems', 'productTypes', 'cutTypes', 'settings'],
+    'readonly',
+  );
 
-  const [stages, orders, items, settingRows] = await Promise.all([
+  const [stages, orders, items, productTypes, cutTypes, settingRows] = await Promise.all([
     tx.objectStore('stages').getAll(),
     tx.objectStore('orders').getAll(),
     tx.objectStore('orderItems').getAll(),
+    tx.objectStore('productTypes').getAll(),
+    tx.objectStore('cutTypes').getAll(),
     tx.objectStore('settings').getAll(),
   ]);
 
@@ -95,6 +125,8 @@ export async function loadData(): Promise<AppData> {
     stages: sortStages(stages),
     orders: sortOrders(orders),
     items: sortItems(items),
+    productTypes: sortNames(productTypes),
+    cutTypes: sortNames(cutTypes),
     settings: settings as unknown as Settings,
   };
 }
@@ -105,8 +137,16 @@ function sortStages(rows: Stage[]): Stage[] {
 
 function sortOrders(rows: Order[]): Order[] {
   return [...rows]
-    .map((order) => ({ ...order, columns: normalizeColumns(order.columns) }))
+    .map((order) => ({
+      ...order,
+      columns: normalizeColumns(order.columns),
+      ...normalizeOrderFields(order),
+    }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
+}
+
+function sortNames<T extends { sortOrder: number; id: number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 }
 
 function sortItems(rows: OrderItem[]): OrderItem[] {
@@ -157,22 +197,45 @@ export async function replaceOrders(orders: Order[], items: OrderItem[]): Promis
 
 export async function replaceAll(data: AppData): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(['stages', 'orders', 'orderItems', 'settings'], 'readwrite');
+  const tx = db.transaction(
+    ['stages', 'orders', 'orderItems', 'productTypes', 'cutTypes', 'settings'],
+    'readwrite',
+  );
 
   await Promise.all([
     tx.objectStore('stages').clear(),
     tx.objectStore('orders').clear(),
     tx.objectStore('orderItems').clear(),
+    tx.objectStore('productTypes').clear(),
+    tx.objectStore('cutTypes').clear(),
     tx.objectStore('settings').clear(),
   ]);
 
   for (const row of data.stages) await tx.objectStore('stages').put(row);
   for (const row of data.orders) await tx.objectStore('orders').put(row);
   for (const row of data.items) await tx.objectStore('orderItems').put(row);
+  for (const row of data.productTypes) await tx.objectStore('productTypes').put(row);
+  for (const row of data.cutTypes) await tx.objectStore('cutTypes').put(row);
   for (const [key, value] of Object.entries(data.settings)) {
     await tx.objectStore('settings').put({ key, value: String(value) });
   }
 
+  await tx.done;
+}
+
+/** Replaces just the two editable name lists, used by the Settings screen. */
+export async function replaceLists(
+  productTypes: ProductType[],
+  cutTypes: CutType[],
+): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(['productTypes', 'cutTypes'], 'readwrite');
+  await Promise.all([
+    tx.objectStore('productTypes').clear(),
+    tx.objectStore('cutTypes').clear(),
+  ]);
+  for (const row of productTypes) await tx.objectStore('productTypes').put(row);
+  for (const row of cutTypes) await tx.objectStore('cutTypes').put(row);
   await tx.done;
 }
 
