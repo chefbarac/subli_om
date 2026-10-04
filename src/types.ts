@@ -1,24 +1,38 @@
-export type TagCase = 'title' | 'upper' | 'as-is';
+export type TagCase = 'lower' | 'title' | 'upper' | 'as-is';
 export type NameCase = 'lower' | 'upper' | 'as-is';
+
+export const ITEM_COLUMNS = [
+  'name',
+  'jerseyNo',
+  'position',
+  'neckType',
+  'tag',
+  'label',
+  'notes',
+] as const;
+export type ColumnKey = (typeof ITEM_COLUMNS)[number];
+
+export const COLUMN_LABELS: Record<ColumnKey, string> = {
+  name: 'Name',
+  jerseyNo: 'Jersey No',
+  position: 'Position',
+  neckType: 'Neck Type',
+  tag: 'Tag (size)',
+  label: 'Label',
+  notes: 'Notes',
+};
+
+export const TOGGLEABLE_COLUMNS: ColumnKey[] = ITEM_COLUMNS.filter(
+  (key) => key !== 'name',
+);
+
+export const EXPORT_EXCLUDED_COLUMNS: ColumnKey[] = ['neckType', 'notes'];
 
 export interface Stage {
   id: number;
   name: string;
   sortOrder: number;
   isActive: boolean;
-}
-
-export interface SizeOption {
-  id: number;
-  name: string;
-  label: string;
-  sortOrder: number;
-}
-
-export interface PositionOption {
-  id: number;
-  name: string;
-  sortOrder: number;
 }
 
 export interface Order {
@@ -29,6 +43,7 @@ export interface Order {
   dueDate: string | null;
   stageId: number;
   product: string;
+  columns: ColumnKey[];
   isCompleted: boolean;
   createdAt: string;
   updatedAt: string;
@@ -41,8 +56,10 @@ export interface OrderItem {
   name: string;
   jerseyNo: string;
   position: string;
+  neckType: string;
   tag: string;
   label: string;
+  notes: string;
 }
 
 export interface Settings {
@@ -59,8 +76,6 @@ export interface AppData {
   orders: Order[];
   items: OrderItem[];
   stages: Stage[];
-  sizes: SizeOption[];
-  positions: PositionOption[];
   settings: Settings;
 }
 
@@ -72,8 +87,10 @@ export interface ItemDraft {
   name: string;
   jerseyNo: string;
   position: string;
+  neckType: string;
   tag: string;
   label: string;
+  notes: string;
 }
 
 export interface OrderDraft {
@@ -83,6 +100,7 @@ export interface OrderDraft {
   dueDate: string | null;
   stageId: number;
   product: string;
+  columns: ColumnKey[];
   isCompleted: boolean;
 }
 

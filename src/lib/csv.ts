@@ -1,14 +1,37 @@
 import { applyCase } from './caseRules';
 import { formatDate } from './dates';
-import type { Order, OrderItem, Settings } from '@/types';
+import { cleanText, unionColumns } from './normalize';
+import { type ColumnKey, type Order, type OrderItem, type Settings } from '@/types';
 
 const BOM = '\uFEFF';
 
+const CSV_HEADERS: Partial<Record<ColumnKey, string>> = {
+  name: 'Name',
+  jerseyNo: 'Jersey No',
+  position: 'Position',
+  tag: 'Tag',
+  label: 'Label',
+};
+
+type CaseSetting =
+  | 'exportNameCase'
+  | 'exportPositionCase'
+  | 'exportTagCase'
+  | 'exportLabelCase';
+
+const COLUMN_CASES: Partial<Record<ColumnKey, CaseSetting>> = {
+  name: 'exportNameCase',
+  position: 'exportPositionCase',
+  tag: 'exportTagCase',
+  label: 'exportLabelCase',
+};
+
 function escapeCell(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const cleaned = cleanText(value);
+  if (/[",\n\r]/.test(cleaned)) {
+    return `"${cleaned.replace(/"/g, '""')}"`;
   }
-  return value;
+  return cleaned;
 }
 
 function toCsv(rows: string[][]): string {
@@ -36,53 +59,46 @@ function buildRows(
   itemsByOrder: Map<number, OrderItem[]>,
   settings: Settings,
 ): string[][] {
-  const header = [
-    'Order No',
-    'Customer',
-    'Due Date',
-    'Product',
-    'Stage',
-    'Name',
-    'Jersey No',
-    'Position',
-    'Tag',
-    'Label',
+  const active = unionColumns(orders);
+  const rows: string[][] = [
+    [
+      'Order No',
+      'Customer',
+      'Due Date',
+      'Product',
+      'Stage',
+      ...active.map((key) => CSV_HEADERS[key] ?? key),
+    ],
   ];
-
-  const rows: string[][] = [header];
 
   const sorted = [...orders].sort((a, b) => a.orderNo.localeCompare(b.orderNo));
 
   for (const order of sorted) {
+    const visible = unionColumns([order]);
     const items = itemsByOrder.get(order.id) ?? [];
+
+    const prefix = [
+      order.orderNo,
+      order.customerName,
+      order.dueDate ? formatDate(order.dueDate, 'yyyy-MM-dd') : '',
+      order.product,
+      '',
+    ];
+
+    const cellFor = (item: OrderItem, key: ColumnKey): string => {
+      const rule = COLUMN_CASES[key];
+      return rule ? applyCase(item[key], settings[rule]) : cleanText(item[key]);
+    };
+
     if (items.length === 0) {
-      rows.push([
-        order.orderNo,
-        order.customerName,
-        order.dueDate ?? '',
-        order.product,
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-      ]);
+      rows.push([...prefix, ...active.map(() => '')]);
       continue;
     }
 
     for (const item of items) {
       rows.push([
-        order.orderNo,
-        order.customerName,
-        order.dueDate ? formatDate(order.dueDate, 'yyyy-MM-dd') : '',
-        order.product,
-        '',
-        applyCase(item.name, settings.exportNameCase),
-        item.jerseyNo,
-        applyCase(item.position, settings.exportPositionCase),
-        applyCase(item.tag, settings.exportTagCase),
-        applyCase(item.label, settings.exportLabelCase),
+        ...prefix,
+        ...active.map((key) => (visible.includes(key) ? cellFor(item, key) : '')),
       ]);
     }
   }

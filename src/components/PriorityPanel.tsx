@@ -6,7 +6,8 @@ import {
   dueLabel,
 } from '@/lib/dates';
 import type { DueBucket } from '@/lib/dates';
-import type { Order } from '@/types';
+import { stageTone } from '@/lib/colors';
+import type { Order, Stage } from '@/types';
 
 const BUCKET_TONE: Record<DueBucket, string> = {
   overdue: 'bg-rose-500',
@@ -18,15 +19,19 @@ const BUCKET_TONE: Record<DueBucket, string> = {
 
 export function PriorityPanel({
   orders,
+  stages,
   itemCounts,
   selectedOrderId,
   onOpenOrder,
 }: {
   orders: Order[];
+  stages: Stage[];
   itemCounts: Map<number, number>;
   selectedOrderId: number | null;
   onOpenOrder: (orderId: number) => void;
 }) {
+  const stageById = useMemo(() => new Map(stages.map((s) => [s.id, s])), [stages]);
+
   const grouped = useMemo(() => {
     const buckets = new Map<DueBucket, Order[]>();
     for (const bucket of DUE_BUCKET_ORDER) buckets.set(bucket, []);
@@ -75,6 +80,7 @@ export function PriorityPanel({
                 <ul>
                   {list.map((order) => {
                     const active = order.id === selectedOrderId;
+                    const stage = stageById.get(order.stageId);
                     return (
                       <li key={order.id}>
                         <button
@@ -104,6 +110,14 @@ export function PriorityPanel({
                               {dueLabel(order.dueDate)}
                             </span>
                           </div>
+                          {stage ? (
+                            <span className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                              <span
+                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${stageTone(stage.sortOrder).dot}`}
+                              />
+                              <span className="truncate">{stage.name}</span>
+                            </span>
+                          ) : null}
                         </button>
                       </li>
                     );

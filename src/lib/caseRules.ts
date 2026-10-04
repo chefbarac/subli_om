@@ -1,3 +1,4 @@
+import { cleanText } from './normalize';
 import type { NameCase, TagCase } from '@/types';
 
 const SHORT_CODE = /^[A-Z0-9]{1,3}$/;
@@ -15,7 +16,7 @@ function toTitleCaseKeepingShortCodes(value: string): string {
 }
 
 export function applyCase(value: string, mode: NameCase | TagCase): string {
-  const trimmed = value.trim();
+  const trimmed = cleanText(value);
   if (mode === 'as-is') return trimmed;
   if (mode === 'upper') return trimmed.toUpperCase();
   if (mode === 'lower') return trimmed.toLowerCase();

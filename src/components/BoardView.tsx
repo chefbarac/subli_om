@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/core';
 import { DueBadge } from './ui';
 import { formatDate } from '@/lib/dates';
+import { stageTone, type StageTone } from '@/lib/colors';
 import type { Order, Stage } from '@/types';
 
 const STAGE_PREFIX = 'stage:';
@@ -129,6 +130,7 @@ function StageColumn({
   onNewOrder: (stageId: number) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${STAGE_PREFIX}${stage.id}` });
+  const tone = stageTone(stage.sortOrder);
 
   return (
     <section
@@ -137,12 +139,15 @@ function StageColumn({
         isOver ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-slate-50'
       }`}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
-        <h3 className="truncate text-sm font-bold text-slate-700">{stage.name}</h3>
-        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-600">
-          {orders.length}
-        </span>
-      </header>
+<header className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+          <h3 className="flex min-w-0 items-center gap-2 truncate text-sm font-bold text-slate-700">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}`} />
+            {stage.name}
+          </h3>
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-600">
+            {orders.length}
+          </span>
+        </header>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-2">
         {orders.length === 0 ? (
@@ -153,6 +158,7 @@ function StageColumn({
               key={order.id}
               order={order}
               itemCount={itemCounts.get(order.id) ?? 0}
+              tone={tone}
               onOpen={() => onOpenOrder(order.id)}
             />
           ))
@@ -175,10 +181,12 @@ function StageColumn({
 function DraggableCard({
   order,
   itemCount,
+  tone,
   onOpen,
 }: {
   order: Order;
   itemCount: number;
+  tone: StageTone;
   onOpen: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -196,7 +204,7 @@ function DraggableCard({
       <button
         type="button"
         onClick={onOpen}
-        className={`block w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-brand-400 hover:shadow ${
+        className={`block w-full rounded-lg border border-l-4 p-3 text-left shadow-sm transition hover:shadow ${tone.card} ${
           order.isCompleted ? 'opacity-60' : ''
         }`}
       >
@@ -216,7 +224,13 @@ function OrderCardContent({
   overlay?: boolean;
 }) {
   return (
-    <div className={overlay ? 'w-72 rotate-2 rounded-lg border border-brand-400 bg-white p-3 shadow-xl' : ''}>
+    <div
+      className={
+        overlay
+          ? 'w-72 rotate-2 rounded-lg border border-brand-400 bg-white p-3 shadow-xl'
+          : ''
+      }
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="font-mono text-xs font-bold text-brand-700">{order.orderNo}</span>
         <DueBadge dueDate={order.dueDate} isCompleted={order.isCompleted} />
@@ -234,9 +248,9 @@ function OrderCardContent({
         <p className="mt-1 line-clamp-2 text-xs text-slate-500">{order.description}</p>
       ) : null}
 
-      <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-        <span>
-          {itemCount} name{itemCount === 1 ? '' : 's'}
+      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+        <span className="font-semibold">
+          {itemCount} item{itemCount === 1 ? '' : 's'}
         </span>
         {order.dueDate ? <span>{formatDate(order.dueDate, 'dd MMM')}</span> : null}
       </div>

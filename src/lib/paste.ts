@@ -1,5 +1,6 @@
+import { cleanText } from './normalize';
 import { labelForTag } from './sizes';
-import type { ItemDraft, SizeOption } from '@/types';
+import type { ItemDraft } from '@/types';
 
 type DraftKey = keyof ItemDraft;
 
@@ -17,14 +18,21 @@ const COLUMN_ALIASES: Record<DraftKey, string[]> = {
     'backnumber',
   ],
   position: ['position', 'role', 'rank', 'post', 'designation'],
+  neckType: ['neck', 'necktype', 'neckline', 'collar', 'collartype'],
   tag: ['tag', 'size', 'cloth', 'clothes', 'clothe', 'garment', 'clothsize'],
   label: ['label', 'abbr', 'abbreviation', 'short', 'code', 'sizeabbr'],
+  notes: ['notes', 'note', 'comment', 'comments', 'remarks', 'remark'],
 };
 
+/**
+ * Column order assumed when the pasted block has no recognisable header.
+ * Neck type and notes are only picked up from a detected header, so adding
+ * them here would shift every later column for existing spreadsheets.
+ */
 const DEFAULT_KEY_ORDER: DraftKey[] = ['name', 'jerseyNo', 'position', 'tag', 'label'];
 
 function normalizeCell(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9#]/g, '');
+  return cleanText(value).toLowerCase().replace(/[^a-z0-9#]/g, '');
 }
 
 function detectHeader(cells: string[]): DraftKey[] | null {
@@ -46,8 +54,8 @@ function detectHeader(cells: string[]): DraftKey[] | null {
 function splitRows(text: string): string[][] {
   const lines = text
     .split(/\r?\n/)
-    .map((line) => line.replace(/\s+$/, ''))
-    .filter((line) => line.trim() !== '');
+    .map((line) => cleanText(line))
+    .filter((line) => line !== '');
 
   const delimiter = lines.some((line) => line.includes('\t')) ? '\t' : ',';
 
@@ -62,7 +70,7 @@ export interface PasteResult {
   columns: DraftKey[];
 }
 
-export function parsePastedNames(text: string, sizes: SizeOption[]): PasteResult {
+export function parsePastedNames(text: string): PasteResult {
   const rows = splitRows(text);
   if (rows.length === 0) {
     return { items: [], headerDetected: false, columns: DEFAULT_KEY_ORDER };
@@ -92,19 +100,21 @@ export function parsePastedNames(text: string, sizes: SizeOption[]): PasteResult
       name: '',
       jerseyNo: '',
       position: '',
+      neckType: '',
       tag: '',
       label: '',
+      notes: '',
     };
 
     row.forEach((rawCell, index) => {
       const key = mapping[index];
       if (!key) return;
-      draft[key] = rawCell.trim();
+      draft[key] = cleanText(rawCell);
     });
 
     if (!draft.name && !draft.jerseyNo && !draft.position && !draft.tag) continue;
 
-    draft.label = draft.label || labelForTag(draft.tag, sizes);
+    draft.label = draft.label || labelForTag(draft.tag);
     items.push(draft);
   }
 

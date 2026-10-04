@@ -1,21 +1,40 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { dueLabel } from '@/lib/dates';
+import { normalizeColumns } from '@/lib/normalize';
 import { Button } from './ui';
-import type { Order, OrderItem, Settings } from '@/types';
+import { ITEM_COLUMNS, type ColumnKey, type Order, type OrderItem, type Settings } from '@/types';
+
+const SHEET_HEADERS: Record<ColumnKey, string> = {
+  name: 'Name',
+  jerseyNo: 'Jersey No',
+  position: 'Position',
+  neckType: 'Neck',
+  tag: 'Tag',
+  label: 'Label',
+  notes: 'Notes',
+};
+
+const COLUMN_ALIGN: Record<ColumnKey, string> = {
+  name: 'font-semibold uppercase',
+  jerseyNo: 'text-center font-mono font-bold',
+  position: '',
+  neckType: '',
+  tag: '',
+  label: 'text-center font-bold uppercase',
+  notes: '',
+};
 
 export function JobSheet({
   order,
   items,
   settings,
-  stageName,
   onClose,
 }: {
   order: Order;
   items: OrderItem[];
   settings: Settings;
-  stageName: string;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -41,11 +60,11 @@ export function JobSheet({
           </div>
         </div>
 
-        <Sheet order={order} items={items} settings={settings} stageName={stageName} />
+        <Sheet order={order} items={items} settings={settings} />
       </div>
 
       <div id="print-root" className="hidden">
-        <Sheet order={order} items={items} settings={settings} stageName={stageName} />
+        <Sheet order={order} items={items} settings={settings} />
       </div>
     </>,
     document.body,
@@ -56,13 +75,15 @@ function Sheet({
   order,
   items,
   settings,
-  stageName,
 }: {
   order: Order;
   items: OrderItem[];
   settings: Settings;
-  stageName: string;
 }) {
+  const columns = normalizeColumns(order.columns);
+  const showNotes = columns.includes('notes');
+  const visible = ITEM_COLUMNS.filter((key) => columns.includes(key) && key !== 'notes');
+
   return (
     <div className="mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black shadow-2xl">
       <header className="flex items-start justify-between gap-4 border-b-2 border-black pb-2">
@@ -78,10 +99,12 @@ function Sheet({
 
       <section className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
         <Row label="Customer" value={order.customerName} />
-        <Row label="Due date" value={order.dueDate ? format(new Date(order.dueDate), 'dd MMM yyyy') : ''} />
+        <Row
+          label="Due date"
+          value={order.dueDate ? format(new Date(order.dueDate), 'dd MMM yyyy') : ''}
+        />
         <Row label="Product" value={order.product} />
-        <Row label="Stage" value={stageName} />
-        <Row label="Description" value={order.description} className="col-span-2" />
+        <Row label="Description" value={order.description} />
         <Row label="Printed" value={format(new Date(), 'dd MMM yyyy')} />
         <Row label="Total items" value={String(items.length)} />
       </section>
@@ -89,7 +112,7 @@ function Sheet({
       <table className="mt-4 w-full border-collapse text-xs">
         <thead>
           <tr>
-            {['#', 'Name', 'Jersey No', 'Position', 'Tag', 'Label', 'Price'].map((heading) => (
+            {['#', ...visible.map((key) => SHEET_HEADERS[key]), 'Price'].map((heading) => (
               <th
                 key={heading}
                 className={`border border-black px-1.5 py-1.5 text-left font-bold uppercase tracking-wide ${
@@ -104,7 +127,10 @@ function Sheet({
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={7} className="border border-black px-2 py-6 text-center text-slate-500">
+              <td
+                colSpan={visible.length + 2}
+                className="border border-black px-2 py-6 text-center text-slate-500"
+              >
                 No names added yet
               </td>
             </tr>
@@ -112,24 +138,27 @@ function Sheet({
             items.map((item, index) => (
               <tr key={item.id}>
                 <td className="border border-black px-1.5 py-2 text-center">{index + 1}</td>
-                <td className="border border-black px-1.5 py-2 text-sm font-semibold uppercase">
-                  {item.name}
-                </td>
-                <td className="border border-black px-1.5 py-2 text-center font-mono text-sm font-bold">
-                  {item.jerseyNo}
-                </td>
-                <td className="border border-black px-1.5 py-2">{item.position}</td>
-                <td className="border border-black px-1.5 py-2">{item.tag}</td>
-                <td className="border border-black px-1.5 py-2 text-center font-bold uppercase">
-                  {item.label}
-                </td>
+                {visible.map((key) =>
+                  key === 'name' ? (
+                    <td key={key} className="border border-black px-1.5 py-2">
+                      <NameWithNotes name={item.name} note={showNotes ? item.notes : ''} />
+                    </td>
+                  ) : (
+                    <td
+                      key={key}
+                      className={`border border-black px-1.5 py-2 text-sm ${COLUMN_ALIGN[key]}`}
+                    >
+                      {item[key]}
+                    </td>
+                  ),
+                )}
                 <td className="h-8 border border-black" />
               </tr>
             ))
           )}
           {items.length > 0 && items.length % 2 === 1 ? (
             <tr>
-              <td colSpan={7} className="h-8 border border-black" />
+              <td colSpan={visible.length + 2} className="h-8 border border-black" />
             </tr>
           ) : null}
         </tbody>
@@ -156,6 +185,20 @@ function Sheet({
         </div>
       </footer>
     </div>
+  );
+}
+
+function NameWithNotes({ name, note }: { name: string; note: string }) {
+  const cleaned = note.trim();
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <span className="text-sm font-semibold uppercase">{name}</span>
+      {cleaned ? (
+        <span className="rounded border border-black px-1 py-px text-[9px] font-bold uppercase leading-tight">
+          {cleaned}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

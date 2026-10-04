@@ -1,27 +1,20 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { DB_NAME, DB_VERSION, buildSeedData } from './seed';
+import { DB_NAME, DB_VERSION, SETTINGS_VERSION, SETTINGS_MIGRATIONS, buildDemoData, buildSeedData } from './seed';
+import { normalizeColumns, normalizeItemFields } from '@/lib/normalize';
 import type {
   AppData,
   Order,
   OrderItem,
-  PositionOption,
   Settings,
-  SizeOption,
   Stage,
 } from '@/types';
+
+const LEGACY_STORES: string[] = ['sizes', 'positions'];
 
 interface SubliDB extends DBSchema {
   stages: {
     key: number;
     value: Stage;
-  };
-  sizes: {
-    key: number;
-    value: SizeOption;
-  };
-  positions: {
-    key: number;
-    value: PositionOption;
   };
   orders: {
     key: number;
@@ -45,14 +38,14 @@ function getDb() {
   if (!dbPromise) {
     dbPromise = openDB<SubliDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        const storeNames = db.objectStoreNames as unknown as {
+          contains(name: string): boolean;
+        };
+        for (const legacy of LEGACY_STORES) {
+          if (storeNames.contains(legacy)) db.deleteObjectStore(legacy as never);
+        }
         if (!db.objectStoreNames.contains('stages')) {
           db.createObjectStore('stages', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('sizes')) {
-          db.createObjectStore('sizes', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('positions')) {
-          db.createObjectStore('positions', { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('orders')) {
           const store = db.createObjectStore('orders', { keyPath: 'id' });
@@ -73,15 +66,10 @@ function getDb() {
 
 export async function loadData(): Promise<AppData> {
   const db = await getDb();
-  const tx = db.transaction(
-    ['stages', 'sizes', 'positions', 'orders', 'orderItems', 'settings'],
-    'readonly',
-  );
+  const tx = db.transaction(['stages', 'orders', 'orderItems', 'settings'], 'readonly');
 
-  const [stages, sizes, positions, orders, items, settingRows] = await Promise.all([
+  const [stages, orders, items, settingRows] = await Promise.all([
     tx.objectStore('stages').getAll(),
-    tx.objectStore('sizes').getAll(),
-    tx.objectStore('positions').getAll(),
     tx.objectStore('orders').getAll(),
     tx.objectStore('orderItems').getAll(),
     tx.objectStore('settings').getAll(),
@@ -99,8 +87,6 @@ export async function loadData(): Promise<AppData> {
 
   return {
     stages: sortStages(stages),
-    sizes: sortSizes(sizes),
-    positions: sortPositions(positions),
     orders: sortOrders(orders),
     items: sortItems(items),
     settings: settings as unknown as Settings,
@@ -111,22 +97,16 @@ function sortStages(rows: Stage[]): Stage[] {
   return [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 }
 
-function sortSizes(rows: SizeOption[]): SizeOption[] {
-  return [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
-}
-
-function sortPositions(rows: PositionOption[]): PositionOption[] {
-  return [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
-}
-
 function sortOrders(rows: Order[]): Order[] {
-  return [...rows].sort(
-    (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id,
-  );
+  return [...rows]
+    .map((order) => ({ ...order, columns: normalizeColumns(order.columns) }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
 }
 
 function sortItems(rows: OrderItem[]): OrderItem[] {
-  return [...rows].sort((a, b) => a.orderId - b.orderId || a.seq - b.seq || a.id - b.id);
+  return [...rows]
+    .map((item) => ({ ...item, ...normalizeItemFields(item) }))
+    .sort((a, b) => a.orderId - b.orderId || a.seq - b.seq || a.id - b.id);
 }
 
 export async function isEmpty(): Promise<boolean> {
@@ -137,29 +117,50 @@ export async function isEmpty(): Promise<boolean> {
 
 export async function seedIfEmpty(): Promise<void> {
   if (!(await isEmpty())) return;
-  const seed = buildSeedData();
-  await replaceAll(seed);
+  await replaceAll(buildDemoData());
+}
+
+export async function migrateSettings(): Promise<void> {
+  const db = await getDb();
+  const stored = Object.fromEntries(
+    (await db.getAll('settings')).map((row) => [row.key, row.value]),
+  );
+  const version = Number(stored.settingsVersion ?? '0');
+  if (version >= SETTINGS_VERSION) return;
+
+  const changes = SETTINGS_MIGRATIONS[version];
+  const tx = db.transaction('settings', 'readwrite');
+  for (const [key, value] of Object.entries(changes ?? {})) {
+    await tx.objectStore('settings').put({ key, value: String(value) });
+  }
+  await tx
+    .objectStore('settings')
+    .put({ key: 'settingsVersion', value: String(SETTINGS_VERSION) });
+  await tx.done;
+}
+
+export async function replaceOrders(orders: Order[], items: OrderItem[]): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(['orders', 'orderItems'], 'readwrite');
+  await tx.objectStore('orders').clear();
+  await tx.objectStore('orderItems').clear();
+  for (const row of orders) await tx.objectStore('orders').put(row);
+  for (const row of items) await tx.objectStore('orderItems').put(row);
+  await tx.done;
 }
 
 export async function replaceAll(data: AppData): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(
-    ['stages', 'sizes', 'positions', 'orders', 'orderItems', 'settings'],
-    'readwrite',
-  );
+  const tx = db.transaction(['stages', 'orders', 'orderItems', 'settings'], 'readwrite');
 
   await Promise.all([
     tx.objectStore('stages').clear(),
-    tx.objectStore('sizes').clear(),
-    tx.objectStore('positions').clear(),
     tx.objectStore('orders').clear(),
     tx.objectStore('orderItems').clear(),
     tx.objectStore('settings').clear(),
   ]);
 
   for (const row of data.stages) await tx.objectStore('stages').put(row);
-  for (const row of data.sizes) await tx.objectStore('sizes').put(row);
-  for (const row of data.positions) await tx.objectStore('positions').put(row);
   for (const row of data.orders) await tx.objectStore('orders').put(row);
   for (const row of data.items) await tx.objectStore('orderItems').put(row);
   for (const [key, value] of Object.entries(data.settings)) {
@@ -193,30 +194,6 @@ export async function putStages(stages: Stage[]): Promise<void> {
 export async function deleteStage(id: number): Promise<void> {
   const db = await getDb();
   await db.delete('stages', id);
-}
-
-export async function putSizes(sizes: SizeOption[]): Promise<void> {
-  const db = await getDb();
-  const tx = db.transaction('sizes', 'readwrite');
-  for (const size of sizes) await tx.objectStore('sizes').put(size);
-  await tx.done;
-}
-
-export async function deleteSize(id: number): Promise<void> {
-  const db = await getDb();
-  await db.delete('sizes', id);
-}
-
-export async function putPositions(positions: PositionOption[]): Promise<void> {
-  const db = await getDb();
-  const tx = db.transaction('positions', 'readwrite');
-  for (const position of positions) await tx.objectStore('positions').put(position);
-  await tx.done;
-}
-
-export async function deletePosition(id: number): Promise<void> {
-  const db = await getDb();
-  await db.delete('positions', id);
 }
 
 export async function addOrder(order: Omit<Order, 'id'>): Promise<number> {

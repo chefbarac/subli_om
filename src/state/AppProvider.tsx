@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useCallback,
   useContext,
@@ -12,18 +12,24 @@ import {
   addOrderItem,
   deleteOrderItems,
   loadData,
+  migrateSettings,
   putOrder,
   putOrderItem,
-  putPositions,
-  putSizes,
   putStages,
   removeOrder,
   replaceAll,
+  replaceOrders,
   saveSettings,
   seedIfEmpty,
 } from '@/db/database';
-import { buildSeedData } from '@/db/seed';
+import { buildDemoOrders, buildSeedData } from '@/db/seed';
+import { collectKnownValues, type KnownValues } from '@/lib/known';
 import { nextOrderNo } from '@/lib/orderNo';
+import {
+  cleanSettings,
+  cleanStageList,
+  cleanText,
+} from '@/lib/normalize';
 import { labelForTag } from '@/lib/sizes';
 import { downloadTextFile } from '@/lib/csv';
 import type {
@@ -33,9 +39,7 @@ import type {
   Order,
   OrderDraft,
   OrderItem,
-  PositionOption,
   Settings,
-  SizeOption,
   Stage,
 } from '@/types';
 
@@ -50,6 +54,7 @@ interface AppContextValue {
   activeStages: Stage[];
   stageById: Map<number, Stage>;
   orderById: Map<number, Order>;
+  known: KnownValues;
   suggestOrderNo: () => string;
   saveOrder: (draft: OrderDraft, rows: EditableRow[], existingId?: number) => Promise<number>;
   moveOrderStage: (orderId: number, stageId: number) => Promise<void>;
@@ -57,10 +62,10 @@ interface AppContextValue {
   deleteOrderById: (orderId: number) => Promise<void>;
   updateSettings: (settings: Settings) => Promise<void>;
   saveStageList: (stages: Stage[]) => Promise<void>;
-  saveSizeList: (sizes: SizeOption[]) => Promise<void>;
-  savePositionList: (positions: PositionOption[]) => Promise<void>;
   exportBackup: () => void;
   importBackup: (file: File) => Promise<void>;
+  loadDemoOrders: () => Promise<void>;
+  deleteAllOrders: () => Promise<void>;
   resetAll: () => Promise<void>;
   reload: () => Promise<void>;
 }
@@ -71,19 +76,26 @@ const EMPTY: AppData = {
   orders: [],
   items: [],
   stages: [],
-  sizes: [],
-  positions: [],
   settings: buildSeedData().settings,
 };
 
-function normalizeRow(row: EditableRow, sizes: SizeOption[]): ItemDraft {
-  const tag = row.tag.trim();
+const EMPTY_KNOWN: KnownValues = {
+  customers: [],
+  products: [],
+  positions: [],
+  neckTypes: [],
+};
+
+function normalizeRow(row: EditableRow): ItemDraft {
+  const tag = cleanText(row.tag);
   return {
-    name: row.name.trim(),
-    jerseyNo: row.jerseyNo.trim(),
-    position: row.position.trim(),
+    name: cleanText(row.name),
+    jerseyNo: cleanText(row.jerseyNo),
+    position: cleanText(row.position),
+    neckType: cleanText(row.neckType),
     tag,
-    label: row.label.trim() || labelForTag(tag, sizes),
+    label: cleanText(row.label) || labelForTag(tag),
+    notes: cleanText(row.notes),
   };
 }
 
@@ -103,6 +115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async function bootstrap() {
       try {
         await seedIfEmpty();
+        await migrateSettings();
         const next = await loadData();
         if (!cancelled) {
           setData(next);
@@ -156,6 +169,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [data.orders],
   );
 
+  const known = useMemo(
+    () =>
+      data.orders.length === 0 && data.items.length === 0
+        ? EMPTY_KNOWN
+        : collectKnownValues(data.orders, data.items),
+    [data.items, data.orders],
+  );
+
   const suggestOrderNo = useCallback(
     () => nextOrderNo(data.orders),
     [data.orders],
@@ -164,12 +185,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveOrder = useCallback(
     async (draft: OrderDraft, rows: EditableRow[], existingId?: number) => {
       const now = new Date().toISOString();
-      const normalized = rows.map((row) => normalizeRow(row, data.sizes));
+      const normalized = rows.map((row) => normalizeRow(row));
+      const orderFields = {
+        ...draft,
+        orderNo: cleanText(draft.orderNo),
+        customerName: cleanText(draft.customerName),
+        product: cleanText(draft.product),
+        description: cleanText(draft.description),
+      };
 
       let orderId: number;
 
       if (existingId === undefined) {
-        orderId = await addOrder({ ...draft, createdAt: now, updatedAt: now });
+        orderId = await addOrder({ ...orderFields, createdAt: now, updatedAt: now });
         for (let seq = 0; seq < normalized.length; seq += 1) {
           await addOrderItem({ orderId, seq, ...normalized[seq] });
         }
@@ -177,7 +205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         orderId = existingId;
         const previous = data.orders.find((order) => order.id === existingId);
         await putOrder({
-          ...draft,
+          ...orderFields,
           id: existingId,
           createdAt: previous?.createdAt ?? now,
           updatedAt: now,
@@ -205,7 +233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await reload();
       return orderId;
     },
-    [data.items, data.orders, data.sizes, reload],
+    [data.items, data.orders, reload],
   );
 
   const moveOrderStage = useCallback(
@@ -242,7 +270,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback(
     async (settings: Settings) => {
-      await saveSettings(settings);
+      await saveSettings(cleanSettings(settings));
       await reload();
     },
     [reload],
@@ -250,23 +278,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const saveStageList = useCallback(
     async (stages: Stage[]) => {
-      await putStages(stages);
-      await reload();
-    },
-    [reload],
-  );
-
-  const saveSizeList = useCallback(
-    async (sizes: SizeOption[]) => {
-      await putSizes(sizes);
-      await reload();
-    },
-    [reload],
-  );
-
-  const savePositionList = useCallback(
-    async (positions: PositionOption[]) => {
-      await putPositions(positions);
+      await putStages(cleanStageList(stages));
       await reload();
     },
     [reload],
@@ -304,6 +316,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await reload();
   }, [reload]);
 
+  const loadDemoOrders = useCallback(async () => {
+    const { orders, items } = buildDemoOrders();
+    await replaceOrders(orders, items);
+    await reload();
+  }, [reload]);
+
+  const deleteAllOrders = useCallback(async () => {
+    await replaceOrders([], []);
+    await reload();
+  }, [reload]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       loading,
@@ -314,6 +337,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeStages,
       stageById,
       orderById,
+      known,
       suggestOrderNo,
       saveOrder,
       moveOrderStage,
@@ -321,30 +345,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteOrderById,
       updateSettings,
       saveStageList,
-      saveSizeList,
-      savePositionList,
       exportBackup,
       importBackup,
+      loadDemoOrders,
+      deleteAllOrders,
       resetAll,
       reload,
     }),
     [
       activeStages,
       data,
+      deleteAllOrders,
       deleteOrderById,
       error,
       exportBackup,
       importBackup,
       itemCounts,
       itemsByOrder,
+      known,
+      loadDemoOrders,
       loading,
       moveOrderStage,
       orderById,
       reload,
       resetAll,
       saveOrder,
-      savePositionList,
-      saveSizeList,
       saveStageList,
       setOrderCompleted,
       stageById,

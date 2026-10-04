@@ -9,6 +9,7 @@ import { SettingsView } from '@/components/SettingsView';
 import { Button, TextInput } from '@/components/ui';
 import { exportOrdersCsv } from '@/lib/csv';
 import { todayISO } from '@/lib/dates';
+import { usePersistentState } from '@/lib/storage';
 import { useApp } from '@/state/AppProvider';
 import type { Order, OrderItem, ViewMode } from '@/types';
 
@@ -29,11 +30,24 @@ export function App() {
     deleteOrderById,
   } = useApp();
 
-  const [view, setView] = useState<ViewMode>('board');
+  const [view, setView] = usePersistentState<ViewMode>('view', 'board', (raw) =>
+    raw === 'board' || raw === 'calendar' ? raw : 'board',
+  );
   const [search, setSearch] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [includeCompleted, setIncludeCompleted] = useState(false);
-  const [hiddenStageIds, setHiddenStageIds] = useState<Set<number>>(new Set());
+  const [hiddenStageIds, setHiddenStageIds] = usePersistentState<number[]>(
+    'calendarHiddenStages',
+    [],
+    (raw) => (Array.isArray(raw) ? raw.filter((id): id is number => typeof id === 'number') : []),
+  );
+
+  const hiddenStageSet = useMemo(() => new Set(hiddenStageIds), [hiddenStageIds]);
+
+  const toggleStageVisible = (stageId: number) =>
+    setHiddenStageIds((current) =>
+      current.includes(stageId) ? current.filter((id) => id !== stageId) : [...current, stageId],
+    );
 
   const [editor, setEditor] = useState<{ orderId: number | null; stageId: number } | null>(null);
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
@@ -199,6 +213,7 @@ export function App() {
       <div className="flex min-h-0 flex-1">
         <PriorityPanel
           orders={visibleOrders}
+          stages={activeStages}
           itemCounts={itemCounts}
           selectedOrderId={editor?.orderId ?? null}
           onOpenOrder={(orderId) => setEditor({ orderId, stageId: 0 })}
@@ -218,15 +233,8 @@ export function App() {
             <CalendarView
               orders={visibleOrders}
               stages={activeStages}
-              hiddenStageIds={hiddenStageIds}
-              onToggleStageVisible={(stageId) =>
-                setHiddenStageIds((current) => {
-                  const next = new Set(current);
-                  if (next.has(stageId)) next.delete(stageId);
-                  else next.add(stageId);
-                  return next;
-                })
-              }
+              hiddenStageIds={hiddenStageSet}
+              onToggleStageVisible={toggleStageVisible}
               onOpenOrder={(orderId) => setEditor({ orderId, stageId: 0 })}
             />
           )}
@@ -248,7 +256,6 @@ export function App() {
           order={sheet.order}
           items={sheet.items}
           settings={data.settings}
-          stageName={data.stages.find((stage) => stage.id === sheet.order.stageId)?.name ?? ''}
           onClose={() => setSheet(null)}
         />
       ) : null}

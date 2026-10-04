@@ -14,16 +14,44 @@ data **locally in the browser** using IndexedDB. There is no server and no accou
 - **Calendar** — month grid of due dates with a checkbox per stage so you can hide the stages you
   are not working on, plus a day detail panel and an unscheduled list.
 - **Order form** — customer, auto order number, product, description, due date, and a names table
-  with `Name | Jersey No | Position | Tag | Label`.
-- **Paste from Excel / Sheets** — copy a block of cells, paste it, and the rows are created with
-  the right columns. Headers are auto-detected.
-- **Tag / Label** — the tag is the full size name you pick (`Extra Large`), the label is the short
-  code printed on the sheet and CSV (`XL`). Both lists are configurable in Settings.
+  with `Name | Jersey No | Position | Neck Type | Tag | Label | Notes`.
+- **Paste from Excel / Sheets** — currently hidden in the UI while the import flow is reworked. The
+  parser still works and header auto-detection is unchanged.
+- **Tag / Label** — the tag is the full size name you pick (`XLarge`), the label is the short code
+  printed on the sheet and CSV (`XL`) and is filled in for you.
 - **A4 job sheet** — printable sheet with blank price cells per row plus blank TOTAL, AMOUNT PAID
   and BALANCE lines for the operator to fill in by hand.
-- **CSV export** — with configurable letter-case rules (names lowercase, labels uppercase, tag
-  title case or uppercase).
+- **Show/hide columns per order** — each order decides whether it needs Jersey No, Position, Neck
+  Type, Tag, Label and Notes. Name is always shown. Hide Position for a jersey order, or hide Jersey
+  No for a polo shirt order. Hidden columns are also dropped from the printed sheet and the CSV.
+- **Neck Type and Notes** — per-name fields for collar style and instructions. Neck Type is free
+  type with suggestions; both are always excluded from the CSV export. On the job sheet, Notes is
+  printed as a small badge beside the name rather than as its own column.
+- **CSV export** — letter case is configurable per column in Settings. Defaults: names lowercase,
+  labels UPPERCASE, tags lowercase, positions left as typed.
+- **Fixed size pairing** — `XSmall`→`XS`, `Small`→`S`, `Medium`→`M`, `Large`→`L`, `XLarge`→`XL`,
+  `2XLarge`→`2XL` … `5XLarge`→`5XL`, `B`→`B`. The label is filled in automatically whenever the
+  tag changes. Older tag spellings such as `Extra Large` and `2XL` still resolve.
+- **Suggested values** — customer, product, position and neck type inputs suggest what you have
+  entered before, ranked by how often you use each value. Everything stays free type. Settings shows
+  the current suggestion lists.
+- **Reorder names by dragging** — grab the handle on the left of any row and drop it in place.
 - **Backup** — download a JSON backup and restore it, because the data only lives in one browser.
+- **Remembers your place** — the selected view (board or calendar) and which stages you have hidden
+  on the calendar are stored in `localStorage` and restored next time you open the app.
+- **Automatic trimming** — leading and trailing whitespace (spaces, tabs, blank lines, and the
+  non-breaking spaces Excel likes to paste) is stripped from every field on save, in pasted name
+  lists, in Settings lists and in CSV export.
+
+## Demo data
+
+On first run the app seeds 12 demo orders (146 names) spread across all four stages, including
+overdue jobs, an unscheduled job and one completed job, so every view has something to show. Due
+dates are generated relative to the day you first open the app.
+
+When you are ready for real work, go to **Settings → Delete all orders**. That clears the demo data
+while keeping your stages, sizes and positions. **Settings → Load demo orders** puts them back, and
+**Settings → Reset all data** restores the original stages, size list and settings.
 
 ## Running locally
 

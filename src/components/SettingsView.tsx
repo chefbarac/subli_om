@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import { stageTone } from '@/lib/colors';
 import { useApp } from '@/state/AppProvider';
+import { SIZE_PAIRINGS } from '@/lib/sizes';
 import { Button, Field, Modal, Select, TextInput } from './ui';
-import type { NameCase, PositionOption, Settings, SizeOption, Stage, TagCase } from '@/types';
+import type { NameCase, Settings, Stage, TagCase } from '@/types';
 
 let idCounter = Date.now();
 function tempId(): number {
@@ -15,10 +16,10 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
     data,
     updateSettings,
     saveStageList,
-    saveSizeList,
-    savePositionList,
     exportBackup,
     importBackup,
+    loadDemoOrders,
+    deleteAllOrders,
     resetAll,
   } = useApp();
 
@@ -37,7 +38,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       title="Settings"
-      subtitle="Stages, sizes, positions, receipt details and local data."
+      subtitle="Stages, receipt details, CSV rules and local data."
       size="xl"
       onClose={onClose}
       footer={
@@ -61,11 +62,51 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
           hasOrders={(stageId) => data.orders.some((order) => order.stageId === stageId)}
         />
 
-        <SizesSection sizes={data.sizes} onSave={saveSizeList} />
+        <SizePairingSection />
 
-        <PositionsSection positions={data.positions} onSave={savePositionList} />
+        <KnownValuesSection />
 
         <ReceiptSection settings={data.settings} onSave={updateSettings} />
+
+        <section>
+          <h3 className="mb-2 text-sm font-bold text-slate-800">Orders</h3>
+          <p className="mb-2 text-xs text-slate-500">
+            The app starts with demo orders so you can try every view. Clear them before you start
+            real work — this keeps your stages, sizes and settings.
+          </p>          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                if (
+                  data.orders.length === 0 ||
+                  window.confirm(
+                    `Replace all ${data.orders.length} current order(s) with demo orders?`,
+                  )
+                ) {
+                  void loadDemoOrders();
+                  setMessage('Demo orders loaded.');
+                }
+              }}
+            >
+              Load demo orders
+            </Button>
+            <Button
+              variant="danger"
+              disabled={data.orders.length === 0}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Delete all ${data.orders.length} order(s) and their names? This cannot be undone.`,
+                  )
+                ) {
+                  void deleteAllOrders();
+                  setMessage('All orders deleted.');
+                }
+              }}
+            >
+              Delete all orders
+            </Button>
+          </div>
+        </section>
 
         <section>
           <h3 className="mb-2 text-sm font-bold text-slate-800">Data (this browser only)</h3>
@@ -224,161 +265,82 @@ function StagesSection({
   );
 }
 
-function SizesSection({
-  sizes,
-  onSave,
-}: {
-  sizes: SizeOption[];
-  onSave: (sizes: SizeOption[]) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState<SizeOption[]>(sizes);
-
-  function update(id: number, patch: Partial<SizeOption>) {
-    setDraft((current) => current.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  }
-
-  function move(index: number, direction: -1 | 1) {
-    setDraft((current) => {
-      const target = index + direction;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next.map((size, i) => ({ ...size, sortOrder: i }));
-    });
-  }
-
+function SizePairingSection() {
   return (
     <section>
       <h3 className="mb-2 text-sm font-bold text-slate-800">Sizes — tag and label</h3>
       <p className="mb-2 text-xs text-slate-500">
-        The tag is the full size name you pick per name (e.g. Extra Large). The label is the short
-        code printed on the job sheet and CSV (XL).
+        Fixed pairing. The tag is the full size name you pick per name, and the label is filled in
+        for you from this table. Tags are offered as suggestions on every row.
       </p>
 
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {draft.map((size, index) => (
-          <div key={size.id} className="flex items-center gap-2">
-            <TextInput
-              value={size.name}
-              onChange={(event) => update(size.id, { name: event.target.value })}
-              className="flex-1"
-            />
-            <TextInput
-              value={size.label}
-              onChange={(event) => update(size.id, { label: event.target.value })}
-              className="w-20 text-center font-semibold uppercase"
-            />
-            <button
-              type="button"
-              onClick={() => move(index, -1)}
-              className="rounded px-1 text-xs text-slate-400 hover:bg-slate-100"
-              aria-label="Move size up"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => move(index, 1)}
-              className="rounded px-1 text-xs text-slate-400 hover:bg-slate-100"
-              aria-label="Move size down"
-            >
-              ↓
-            </button>
-            <button
-              type="button"
-              onClick={() => setDraft((current) => current.filter((s) => s.id !== size.id))}
-              className="rounded px-1 text-xs text-rose-400 hover:bg-rose-50"
-              aria-label="Delete size"
-            >
-              ✕
-            </button>
-          </div>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {SIZE_PAIRINGS.map((size) => (
+          <li
+            key={size.tag}
+            className="flex items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1"
+          >
+            <span className="text-sm text-slate-700">{size.tag}</span>
+            <span className="rounded bg-white px-1.5 py-0.5 font-mono text-xs font-bold uppercase text-slate-600 ring-1 ring-slate-200">
+              {size.label}
+            </span>
+          </li>
         ))}
-      </div>
-
-      <div className="mt-2 flex gap-2">
-        <Button
-          size="sm"
-          onClick={() =>
-            setDraft((current) => [
-              ...current,
-              { id: tempId(), name: 'New size', label: '', sortOrder: current.length },
-            ])
-          }
-        >
-          + Add size
-        </Button>
-        <Button size="sm" variant="primary" onClick={() => void onSave(draft)}>
-          Save sizes
-        </Button>
-      </div>
+      </ul>
     </section>
   );
 }
 
-function PositionsSection({
-  positions,
-  onSave,
-}: {
-  positions: PositionOption[];
-  onSave: (positions: PositionOption[]) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState<PositionOption[]>(positions);
+function KnownValuesSection() {
+  const { known } = useApp();
+
+  const groups: Array<[string, string[]]> = [
+    ['Customers', known.customers],
+    ['Products', known.products],
+    ['Positions', known.positions],
+    ['Neck types', known.neckTypes],
+  ];
+
+  const empty = groups.every(([, values]) => values.length === 0);
 
   return (
     <section>
-      <h3 className="mb-2 text-sm font-bold text-slate-800">Positions</h3>
+      <h3 className="mb-2 text-sm font-bold text-slate-800">Suggested values</h3>
       <p className="mb-2 text-xs text-slate-500">
-        Offered in the position dropdown on each name, e.g. Manager, Captain, Player.
+        Collected automatically from the orders you have already saved. Each input offers these as
+        suggestions while still letting you type anything new.
       </p>
 
-      <div className="flex flex-wrap gap-1.5">
-        {draft.map((position) => (
-          <div key={position.id} className="flex items-center gap-1">
-            <TextInput
-              value={position.name}
-              onChange={(event) =>
-                setDraft((current) =>
-                  current.map((p) =>
-                    p.id === position.id ? { ...p, name: event.target.value } : p,
-                  ),
-                )
-              }
-              className="w-36"
-            />
-            <button
-              type="button"
-              onClick={() => setDraft((current) => current.filter((p) => p.id !== position.id))}
-              className="rounded px-1 text-xs text-rose-400 hover:bg-rose-50"
-              aria-label="Delete position"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-2 flex gap-2">
-        <Button
-          size="sm"
-          onClick={() =>
-            setDraft((current) => [
-              ...current,
-              { id: tempId(), name: 'New position', sortOrder: current.length },
-            ])
-          }
-        >
-          + Add position
-        </Button>
-        <Button size="sm" variant="primary" onClick={() => void onSave(draft)}>
-          Save positions
-        </Button>
-      </div>
+      {empty ? (
+        <p className="text-xs text-slate-400">Nothing suggested yet — save an order to build this up.</p>
+      ) : (
+        <div className="space-y-2">
+          {groups.map(([title, values]) =>
+            values.length === 0 ? null : (
+              <div key={title}>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  {title}
+                </p>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {values.map((value) => (
+                    <span
+                      key={value}
+                      className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600"
+                    >
+                      {value}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
-const TAG_CASES: TagCase[] = ['as-is', 'title', 'upper'];
+const TAG_CASES: TagCase[] = ['as-is', 'lower', 'title', 'upper'];
 const NAME_CASES: NameCase[] = ['as-is', 'lower', 'upper'];
 
 function ReceiptSection({
