@@ -138,10 +138,25 @@ function Sheet({
   return (
         <div className="mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black print:bg-white print:shadow-none">
 
-      <header className="flex items-start justify-between gap-4 border-b-2 border-black pb-2">
-        <div>
-          <h1 className="text-xl font-bold uppercase tracking-wide">{settings.companyName}</h1>
-          <p className="text-xs">Sublimation job sheet</p>
+      <header className="relative flex items-start justify-between gap-4 border-b-2 border-black pb-2">
+        <div className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center opacity-5 print:opacity-[0.04]">
+          <img
+            src="/img/agt-logo.png"
+            alt=""
+            aria-hidden="true"
+            className="h-[50mm] w-auto object-contain"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <img
+            src="/img/agt-logo.png"
+            alt="Company logo"
+            className="h-10 w-auto object-contain"
+          />
+          <div>
+            <h1 className="text-xl font-bold uppercase tracking-wide">{settings.companyName}</h1>
+            <p className="text-xs">Sublimation job sheet</p>
+          </div>
         </div>
         <div className="text-right text-xs">
           <p className="text-base font-bold">ORDER NO.</p>
