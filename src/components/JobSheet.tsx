@@ -138,7 +138,7 @@ function Sheet({
     <div className="relative mx-auto w-full max-w-[210mm] bg-white p-[8mm] text-black print:bg-white print:shadow-none">
       <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
         <img
-          src="/img/agt-logo.png"
+          src="img/agt-logo.png"
           alt=""
           aria-hidden="true"
           className="h-[75mm] w-auto -rotate-12 object-contain opacity-[0.06] print:opacity-[0.04]"
