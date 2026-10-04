@@ -14,7 +14,7 @@ export type ColumnKey = (typeof ITEM_COLUMNS)[number];
 
 export const COLUMN_LABELS: Record<ColumnKey, string> = {
   name: 'Name',
-  jerseyNo: 'Jersey No',
+  jerseyNo: 'Number',
   position: 'Position',
   cutType: 'Cut Type',
   tag: 'Tag (size)',

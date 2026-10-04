@@ -147,7 +147,7 @@ const lines = csv.split('\r\n');
 check(
   'header row',
   lines[0],
-  'Name,Jersey No,Position,Tag,Label',
+  'name,num,position,tag,label',
 );
 check(
   'customer name is escaped',
@@ -289,14 +289,14 @@ check('excluded list is notes and neck', [...EXPORT_EXCLUDED_COLUMNS], ['cutType
 const jerseyItems: OrderItem[] = csvItems.map((i) => ({ ...i, orderId: jerseyOrder.id }));
 const jerseyCsv = buildOrdersCsv([jerseyOrder], jerseyItems, DEFAULT_SETTINGS).split('\r\n');
 check('jersey csv drops position header', jerseyCsv[0].includes('Position'), false);
-check('jersey csv keeps jersey header', jerseyCsv[0].includes('Jersey No'), true);
+check('jersey csv keeps jersey header', jerseyCsv[0].includes('num'), true);
 check('jersey csv header width', jerseyCsv[0].split(',').length, 4);
 check('jersey csv row keeps name', jerseyCsv[1].includes('ahmed ali'), true);
 
 const poloItems: OrderItem[] = csvItems.map((i) => ({ ...i, orderId: poloOrder.id }));
 const poloCsv = buildOrdersCsv([poloOrder], poloItems, DEFAULT_SETTINGS).split('\r\n');
 check('polo csv drops jersey header', poloCsv[0].includes('Jersey No'), false);
-check('polo csv keeps position header', poloCsv[0].includes('Position'), true);
+check('polo csv keeps position header', poloCsv[0].includes('position'), true);
 check('polo csv header width', poloCsv[0].split(',').length, 4);
 check('polo csv position preserved', poloCsv[1].includes(',Captain,'), true);
 check('polo csv has one data row', poloCsv.length, 2);

@@ -139,7 +139,7 @@ export function OrderEditor({
     () => normalizeColumns(existing?.columns),
   );
   const [productTypeIds, setProductTypeIds] = useState<number[]>(
-    () => existing?.productTypeIds ?? [productTypes[0]?.id ?? 0],
+    () => existing?.productTypeIds ?? productTypes.map((t) => t.id),
   );
 
   const [rows, setRows] = useState<RowState[]>(() => {
@@ -164,7 +164,7 @@ export function OrderEditor({
 
   /** New rows join the first type so nothing starts out unassigned. */
   const newRowType = productTypeIds[0] ?? productTypes[0]?.id ?? null;
-  const showTypeColumn = productTypeIds.length > 1 || productTypes.length > 1;
+  const showTypeColumn = productTypes.length > 0;
 
   function updateRow(key: string, patch: Partial<RowState>) {
     setRows((current) =>
@@ -605,7 +605,7 @@ function ItemTable({
                       </td>
                     ) : null}
                     {visible.includes('name') ? (
-                      <td>
+                      <td className="min-w-[220px]">
                         <TextInput
                           value={row.name}
                           onChange={(event) => onUpdate(row.key, { name: event.target.value })}
@@ -614,7 +614,7 @@ function ItemTable({
                       </td>
                     ) : null}
                     {visible.includes('jerseyNo') ? (
-                      <td className="w-24">
+                      <td className="w-28">
                         <TextInput
                           value={row.jerseyNo}
                           onChange={(event) => onUpdate(row.key, { jerseyNo: event.target.value })}

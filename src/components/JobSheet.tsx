@@ -14,7 +14,7 @@ import {
 
 const SHEET_HEADERS: Record<ColumnKey, string> = {
   name: 'Name',
-  jerseyNo: 'Jersey No',
+  jerseyNo: 'Number',
   position: 'Position',
   cutType: 'Cut Type',
   tag: 'Tag',

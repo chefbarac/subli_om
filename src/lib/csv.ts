@@ -5,11 +5,12 @@ import { type ColumnKey, type Order, type OrderItem, type Settings } from '@/typ
 const BOM = '\uFEFF';
 
 const CSV_HEADERS: Partial<Record<ColumnKey, string>> = {
-  name: 'Name',
-  jerseyNo: 'Jersey No',
-  position: 'Position',
-  tag: 'Tag',
-  label: 'Label',
+  name: 'name',
+  jerseyNo: 'num',
+  position: 'position',
+  tag: 'tag',
+  label: 'label',
+  cutType: 'cuttype',
 };
 
 type CaseSetting =
