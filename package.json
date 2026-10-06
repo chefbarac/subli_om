@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
-    "test": "esbuild scripts/smoke.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/smoke.mjs --alias:@=./src --log-level=warning && node node_modules/.cache/smoke.mjs",
+    "test": "npm run test:logic && npm run test:db",
+    "test:logic": "esbuild scripts/smoke.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/smoke.mjs --alias:@=./src --log-level=warning && node node_modules/.cache/smoke.mjs",
+    "test:db": "esbuild scripts/dbtest.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/dbtest.mjs --alias:@=./src --log-level=warning && node node_modules/.cache/dbtest.mjs",
     "verify": "npm run typecheck && npm run lint && npm run test && vite build"
   },
   "dependencies": {
@@ -35,6 +37,7 @@
     "eslint": "8.57.0",
     "eslint-plugin-react-hooks": "4.6.2",
     "eslint-plugin-react-refresh": "0.4.7",
+    "fake-indexeddb": "^6.2.5",
     "postcss": "8.4.39",
     "tailwindcss": "3.4.6",
     "typescript": "5.5.3",

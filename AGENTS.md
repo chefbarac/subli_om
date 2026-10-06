@@ -28,6 +28,11 @@ in `src/db/seed.ts`. That has direct consequences:
   see `normalizeColumns` / `normalizeItemFields` in `src/lib/normalize.ts`.
 - Removing an object store **does** need a bump to `DB_VERSION`, plus an entry in
   the `upgrade` block in `src/db/database.ts`.
+- Every store declares `keyPath` **without** `autoIncrement`. Inserting a row
+  that lacks the key field throws `DataError` ("key path did not yield a
+  value") rather than silently auto-numbering. `addOrder` / `addOrderItem`
+  assign ids via `nextNumericId` from `src/lib/ids.ts` — keep that pattern for
+  any new store that uses `add`.
 
 ## Verify
 
@@ -35,12 +40,19 @@ in `src/db/seed.ts`. That has direct consequences:
 npm run verify   # typecheck + lint + smoke tests + production build
 ```
 
-`npm run test` runs `scripts/smoke.ts`, a hand-rolled assertion script covering
-the pure logic: order numbering, CSV generation and case rules, the fixed size
-pairing, paste parsing, column visibility, and known-value collection. There is
-no jsdom or React testing library, so component behaviour is **not** covered —
-typecheck and build are the only safety net for JSX. When changing logic that
-lives outside a component, add cases to `scripts/smoke.ts`.
+`npm run test` runs two suites:
+
+- `npm run test:logic` → `scripts/smoke.ts`, a hand-rolled assertion script
+  covering the pure logic: order numbering, CSV generation and case rules, the
+  fixed size pairing, paste parsing, column visibility, and known-value
+  collection.
+- `npm run test:db` → `scripts/dbtest.ts`, which runs the real `src/db/database.ts`
+  against `fake-indexeddb`. Use this whenever you change how rows are inserted
+  or keyed — it is the only thing that can catch a bad IndexedDB key path.
+
+There is no jsdom or React testing library, so component behaviour is **not**
+covered — typecheck and build are the only safety net for JSX. When changing
+logic that lives outside a component, add cases to `scripts/smoke.ts`.
 
 ## Domain rules worth remembering
 

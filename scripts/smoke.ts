@@ -1,6 +1,7 @@
 import { parsePastedNames } from '@/lib/paste';
 import { exportableColumns, normalizeColumns, unionColumns } from '@/lib/normalize';
 import { nextOrderNo } from '@/lib/orderNo';
+import { nextNumericId } from '@/lib/ids';
 import { applyCase } from '@/lib/caseRules';
 import { SIZE_PAIRINGS, SIZE_TAGS, labelForTag } from '@/lib/sizes';
 import { buildOrdersCsv } from '@/lib/csv';
@@ -58,6 +59,13 @@ const orders: Order[] = [
 
 check('continues current year', nextOrderNo(orders, 2026), 'ORD-2026-0043');
 check('restarts new year', nextOrderNo(orders, 2027), 'ORD-2027-0001');
+
+console.log('\nnext id');
+check('empty store starts at 1', nextNumericId([]), 1);
+check('continues past max', nextNumericId([1, 2, 3]), 4);
+check('tolerates gaps left by deletes', nextNumericId([1, 5, 9]), 10);
+check('ignores non positive keys', nextNumericId([0, -3]), 1);
+check('unsorted keys still use max', nextNumericId([7, 2, 5]), 8);
 
 console.log('\ncase rules');
 check('lower', applyCase('AHMED ALI', 'lower'), 'ahmed ali');

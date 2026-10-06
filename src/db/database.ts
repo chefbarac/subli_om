@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { DB_NAME, DB_VERSION, SETTINGS_VERSION, SETTINGS_MIGRATIONS, buildDemoData, buildSeedData } from './seed';
 import { normalizeColumns, normalizeItemFields, normalizeOrderFields } from '@/lib/normalize';
+import { nextNumericId } from '@/lib/ids';
 import type {
   AppData,
   CutType,
@@ -267,7 +268,8 @@ export async function deleteStage(id: number): Promise<void> {
 
 export async function addOrder(order: Omit<Order, 'id'>): Promise<number> {
   const db = await getDb();
-  return db.add('orders', order as Order);
+  const id = nextNumericId(await db.getAllKeys('orders'));
+  return db.add('orders', { ...order, id });
 }
 
 export async function putOrder(order: Order): Promise<void> {
@@ -277,7 +279,8 @@ export async function putOrder(order: Order): Promise<void> {
 
 export async function addOrderItem(item: Omit<OrderItem, 'id'>): Promise<number> {
   const db = await getDb();
-  return db.add('orderItems', item as OrderItem);
+  const id = nextNumericId(await db.getAllKeys('orderItems'));
+  return db.add('orderItems', { ...item, id });
 }
 
 export async function putOrderItem(item: OrderItem): Promise<void> {
