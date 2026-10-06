@@ -5,6 +5,7 @@ import { nextNumericId } from '@/lib/ids';
 import { applyCase } from '@/lib/caseRules';
 import { SIZE_PAIRINGS, SIZE_TAGS, labelForTag } from '@/lib/sizes';
 import { buildOrdersCsv } from '@/lib/csv';
+import { csvFileRejection, decodeCsvBytes } from '@/lib/csvFile';
 import { collectKnownValues, suggestionsFor } from '@/lib/known';
 import {
   cleanSettings,
@@ -219,6 +220,121 @@ check('row count after duplicates', mergedDupes.rows.length, 4);
 check('input rows unchanged', seedRows[0].jerseyNo, '10');
 check('input label unchanged', seedRows[0].label, 'XL');
 check('input still two rows', seedRows.length, 2);
+
+console.log('\nquoted cells round-trip');
+// escapeCell wraps a value containing a comma, so a naive line.split(',') reads
+// our own export back as five cells and shifts every column after the name.
+const quotedOrder: Order = {
+  id: 5,
+  orderNo: 'ORD-2026-0009',
+  customerName: 'Club, "A"',
+  description: '',
+  dueDate: null,
+  stageId: 1,
+  productTypeIds: [],
+  columns: [...ITEM_COLUMNS],
+  isCompleted: false,
+  createdAt: '',
+  updatedAt: '',
+};
+const quotedItems: OrderItem[] = [
+  {
+    id: 1,
+    orderId: 5,
+    seq: 0,
+    name: 'Doe, John',
+    jerseyNo: '10',
+    position: 'Captain',
+    cutType: '',
+    tag: 'XLarge',
+    label: 'xl',
+    notes: 'said ""send to home""',
+    productTypeId: null,
+  },
+];
+const quotedCsv = buildOrdersCsv([quotedOrder], quotedItems, DEFAULT_SETTINGS);
+check('export quotes the comma', quotedCsv.includes('"doe, john"'), true);
+
+const quotedParsed = parsePastedNames(quotedCsv);
+check('header detected', quotedParsed.headerDetected, true);
+check('name survives the comma', quotedParsed.items[0].name, 'doe, john');
+check('number still aligns', quotedParsed.items[0].jerseyNo, '10');
+check('position still aligns', quotedParsed.items[0].position, 'Captain');
+check('tag still aligns', quotedParsed.items[0].tag, 'xlarge');
+check('label still aligns', quotedParsed.items[0].label, 'XL');
+check('row count unchanged', quotedParsed.items.length, 1);
+
+console.log('\nescaped quotes and line breaks');
+const escaped = parsePastedNames(
+  ['name,num', '"Club ""A""",7', '"Line one\nLine two",9'].join('\n'),
+);
+check('doubled quote collapses to one', escaped.items[0].name, 'Club "A"');
+check('quoted newline stays one row', escaped.items.length, 2);
+check('newline preserved inside the cell', escaped.items[1].name, 'Line one\nLine two');
+check('number after a newline', escaped.items[1].jerseyNo, '9');
+
+// A stray quote in the middle of a value must not open a quoted cell and
+// swallow the rest of the line.
+const stray = parsePastedNames(['name,num', '5" pipe,10'].join('\n'));
+check('mid-value quote stays literal', stray.items[0].name, '5" pipe');
+check('cells after it still parse', stray.items[0].jerseyNo, '10');
+
+console.log('\ndelimiter detection');
+const tabWithComma = parsePastedNames(
+  ['name\tposition', 'Ahmed\tCaptain, Jr'].join('\n'),
+);
+check('tab wins when present', tabWithComma.items[0].position, 'Captain, Jr');
+check('tab parse keeps name', tabWithComma.items[0].name, 'Ahmed');
+
+const commaFile = parsePastedNames(['name,position', 'Ahmed,Captain\tlead'].join('\n'));
+check('comma wins when tab only sits in a cell', commaFile.items[0].position, 'Captain\tlead');
+
+// Blank lines and whitespace-only lines are dropped, as they were before.
+const blanks = parsePastedNames(['name,num', '', '   ', 'Ahmed,10', ''].join('\n'));
+check('blank lines skipped', blanks.items.length, 1);
+
+console.log('\nfile acceptance');
+const file = (name: string, type: string, size = 1024) => ({ name, type, size });
+check('csv accepted', csvFileRejection(file('orders.csv', 'text/csv')), null);
+check('uppercase extension accepted', csvFileRejection(file('ORDERS.CSV', '')), null);
+check('txt accepted', csvFileRejection(file('list.txt', '')), null);
+check('tsv accepted', csvFileRejection(file('list.tsv', '')), null);
+check(
+  'excel csv mime accepted despite no known extension',
+  csvFileRejection(file('export', 'application/vnd.ms-excel')),
+  null,
+);
+check('json backup refused', csvFileRejection(file('backup.json', 'application/json')) !== null, true);
+check('image refused', csvFileRejection(file('logo.png', 'image/png')) !== null, true);
+check('oversize refused', csvFileRejection(file('orders.csv', 'text/csv', 6 * 1024 * 1024)) !== null, true);
+check(
+  'refusal names the file',
+  csvFileRejection(file('backup.json', 'application/json'))?.includes('backup.json'),
+  true,
+);
+
+console.log('\ncsv byte decoding');
+const encoder = new TextEncoder();
+check(
+  'utf8 with BOM loses the BOM',
+  decodeCsvBytes(new Uint8Array([0xef, 0xbb, 0xbf, ...encoder.encode('name,num')])),
+  'name,num',
+);
+check(
+  'utf8 without BOM passes through',
+  decodeCsvBytes(encoder.encode('name,num')),
+  'name,num',
+);
+// Excel's "Unicode Text" save: UTF-16LE with a BOM.
+const utf16le = new Uint8Array([0xff, 0xfe, 0x6e, 0x00, 0x61, 0x00, 0x6d, 0x00, 0x65, 0x00]);
+check('utf16le BOM decoded', decodeCsvBytes(utf16le), 'name');
+const utf16be = new Uint8Array([0xfe, 0xff, 0x00, 0x6e, 0x00, 0x61, 0x00, 0x6d, 0x00, 0x65]);
+check('utf16be BOM decoded', decodeCsvBytes(utf16be), 'name');
+check(
+  'arabic round-trips through utf8',
+  decodeCsvBytes(encoder.encode('أحمد')),
+  'أحمد',
+);
 
 console.log('\nCSV export rules');
 const csvOrder: Order = {

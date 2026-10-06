@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   KeyboardSensor,
@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { exportOrdersCsv } from '@/lib/csv';
+import { csvFileRejection, decodeCsvBytes } from '@/lib/csvFile';
 import { cleanText, defaultStageId, normalizeColumns } from '@/lib/normalize';
 import { suggestionsFor, type KnownValues } from '@/lib/known';
 import { mergePastedRows, nameKey, parsePastedNames, type PasteMerge } from '@/lib/paste';
@@ -476,6 +477,10 @@ function PasteCsvModal({
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const [loadedFile, setLoadedFile] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = useMemo(() => parsePastedNames(text), [text]);
 
@@ -488,6 +493,51 @@ function PasteCsvModal({
   // row as an update rather than a new one. Built from the table, not from the
   // merge, so a name repeated in the pasted block still reads as "new" twice.
   const existingNames = useMemo(() => new Set(rows.map((row) => nameKey(row.name))), [rows]);
+
+  /**
+   * Load the first file in a list, replacing whatever is in the box so the
+   * preview always shows exactly the file that was dropped.
+   */
+  function loadFiles(files: FileList | null | undefined) {
+    const file = files?.[0];
+    if (!file) return;
+
+    const rejection = csvFileRejection(file);
+    if (rejection) {
+      setFileError(rejection);
+      return;
+    }
+
+    setFileError(null);
+    void file
+      .arrayBuffer()
+      .then((buffer) => {
+        setText(decodeCsvBytes(new Uint8Array(buffer)));
+        setLoadedFile(file.name);
+      })
+      .catch(() => setFileError(`Could not read ${file.name}.`));
+  }
+
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setDropping(false);
+    loadFiles(event.dataTransfer.files);
+  }
+
+  // A file dropped anywhere else in the window would make the browser navigate
+  // to it, discarding the draft order. Swallow those drops while the modal is
+  // open; the zone above has already handled its own.
+  useEffect(() => {
+    const swallow = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+    };
+    window.addEventListener('dragover', swallow);
+    window.addEventListener('drop', swallow);
+    return () => {
+      window.removeEventListener('dragover', swallow);
+      window.removeEventListener('drop', swallow);
+    };
+  }, []);
 
   const empty = parsed.items.length === 0;
 
@@ -523,19 +573,77 @@ function PasteCsvModal({
       }
     >
       <div className="space-y-4">
-        <Field label="Paste a block of rows" hint="Comma or tab separated. A header row is optional.">
-          <TextArea
-            rows={8}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={'name,num,pos,tag\nAhmed Ali,10,Captain,XLarge\nBilal,7,Player,Large'}
-            className="font-mono text-xs"
-          />
-        </Field>
+        {/* The whole input block is a drop target — dropping on the textarea
+            alone would fall through to the browser, which inserts the file
+            path as text. */}
+        <div
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDropping(true);
+          }}
+          onDragLeave={(event) => {
+            // The child elements fire dragleave too; only reset when the
+            // pointer actually left the zone.
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setDropping(false);
+          }}
+          onDrop={handleDrop}
+          className={`space-y-3 rounded-lg p-2 transition ${
+            dropping ? 'bg-brand-50 ring-2 ring-brand-400' : ''
+          }`}
+        >
+          <Field label="Paste a block of rows" hint="Comma or tab separated. A header row is optional.">
+            <TextArea
+              rows={8}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                setLoadedFile(null);
+              }}
+              placeholder={'name,num,pos,tag\nAhmed Ali,10,Captain,XLarge\nBilal,7,Player,Large'}
+              className="font-mono text-xs"
+            />
+          </Field>
+
+          <div
+            className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-dashed px-3 py-3 transition ${
+              dropping ? 'border-brand-500 bg-white/60' : 'border-slate-300 bg-slate-50'
+            }`}
+          >
+            <div className="text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Drop a CSV file here</span>
+              <span className="text-slate-500"> — .csv, .txt or .tsv, up to 5 MB</span>
+              {loadedFile ? (
+                <span className="mt-0.5 block text-emerald-700">Loaded {loadedFile}</span>
+              ) : null}
+            </div>
+            <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+              Choose file
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.txt,.tsv,text/csv,text/plain,text/tab-separated-values"
+              className="hidden"
+              onChange={(event) => {
+                loadFiles(event.target.files);
+                // Allow re-picking the same file later.
+                event.target.value = '';
+              }}
+            />
+          </div>
+        </div>
+
+        {fileError ? (
+          <p className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-200">
+            {fileError}
+          </p>
+        ) : null}
 
         {empty ? (
           <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
-            Paste a CSV or a block of tab-separated rows above to see how they will be applied.
+            Drop a CSV file above, or paste a block of rows in the box, to see how they will be
+            applied.
           </p>
         ) : (
           <div className="space-y-2">

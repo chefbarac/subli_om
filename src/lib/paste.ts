@@ -70,17 +70,108 @@ function detectHeader(cells: string[]): Array<DraftKey | undefined> | null {
   return matches >= 2 ? mapping : null;
 }
 
+/**
+ * Work out whether the block is tab or comma separated before tokenising.
+ *
+ * Only the first row is inspected, because that is the row that defines the
+ * file's structure. Scanning the whole block would let a stray tab inside a
+ * later data cell turn a comma file into a TSV, and quote tracking keeps a
+ * quoted cell from being mistaken for a delimiter run.
+ */
+function detectDelimiter(text: string): '\t' | ',' {
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        i += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (!inQuotes && (char === '\n' || char === '\r')) break;
+    if (!inQuotes && char === '\t') return '\t';
+  }
+  return ',';
+}
+
+/**
+ * Tokenise a delimited block, honouring RFC 4180 quoting.
+ *
+ * The old implementation did a naive `line.split(',')`, which could not read
+ * back what this app itself writes: `escapeCell` wraps any cell containing a
+ * comma in double quotes, so a name like `Doe, John` came back as two cells and
+ * every later column shifted by one. Splitting on newlines first also broke any
+ * cell that legitimately contained a line break.
+ *
+ * Rows where every cell is blank are dropped, matching the old empty-line
+ * filter.
+ */
 function splitRows(text: string): string[][] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => cleanText(line))
-    .filter((line) => line !== '');
+  const delimiter = detectDelimiter(text);
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
 
-  const delimiter = lines.some((line) => line.includes('\t')) ? '\t' : ',';
+  const endCell = () => {
+    row.push(cell);
+    cell = '';
+  };
+  const endRow = () => {
+    endCell();
+    rows.push(row);
+    row = [];
+  };
 
-  return lines.map((line) =>
-    delimiter === '\t' ? line.split('\t') : line.split(delimiter),
-  );
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      // A quote only opens a quoted cell at the start of that cell, so a
+      // stray quote in the middle of a value stays literal.
+      if (cell === '') inQuotes = true;
+      else cell += char;
+      continue;
+    }
+    if (char === delimiter) {
+      endCell();
+      continue;
+    }
+    if (char === '\r') {
+      if (text[i + 1] === '\n') i += 1;
+      endRow();
+      continue;
+    }
+    if (char === '\n') {
+      endRow();
+      continue;
+    }
+    cell += char;
+  }
+
+  // A trailing newline leaves nothing pending; anything else is a final row
+  // with no terminator.
+  if (cell !== '' || row.length > 0) endRow();
+
+  return rows.filter((cells) => cells.some((value) => value.trim() !== ''));
 }
 
 export interface PasteResult {
