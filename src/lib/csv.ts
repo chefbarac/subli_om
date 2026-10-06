@@ -4,7 +4,11 @@ import { type ColumnKey, type Order, type OrderItem, type Settings } from '@/typ
 
 const BOM = '\uFEFF';
 
-const CSV_HEADERS: Partial<Record<ColumnKey, string>> = {
+/**
+ * Internal column -> CSV header used on export. Importers build the reverse
+ * lookup from this so a file we wrote always reads back correctly.
+ */
+export const CSV_HEADERS: Partial<Record<ColumnKey, string>> = {
   name: 'name',
   jerseyNo: 'num',
   position: 'pos',

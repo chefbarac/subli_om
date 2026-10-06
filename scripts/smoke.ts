@@ -1,4 +1,4 @@
-import { parsePastedNames } from '@/lib/paste';
+import { mergePastedRows, parsePastedNames } from '@/lib/paste';
 import { exportableColumns, normalizeColumns, unionColumns } from '@/lib/normalize';
 import { nextOrderNo } from '@/lib/orderNo';
 import { nextNumericId } from '@/lib/ids';
@@ -21,6 +21,7 @@ import {
 import {
   EXPORT_EXCLUDED_COLUMNS,
   ITEM_COLUMNS,
+  type ItemDraft,
   type Order,
   type OrderItem,
 } from '@/types';
@@ -119,6 +120,105 @@ const onlyHeader = parsePastedNames('name');
 check('treated as data', onlyHeader.headerDetected, false);
 check('row kept', onlyHeader.items.length, 1);
 check('value kept', onlyHeader.items[0].name, 'name');
+
+console.log('\npaste with our own export headers');
+// These are exactly the headers CSV_HEADERS writes, so a file we exported has
+// to read back into the same columns.
+const roundTrip = parsePastedNames(
+  ['name,num,pos,tag', 'Ahmed Ali,10,Captain,XLarge'].join('\n'),
+);
+check('header detected', roundTrip.headerDetected, true);
+check('name column', roundTrip.columns[0], 'name');
+check('num maps to jerseyNo', roundTrip.columns[1], 'jerseyNo');
+check('pos maps to position', roundTrip.columns[2], 'position');
+check('tag column', roundTrip.columns[3], 'tag');
+check('position value lands in position', roundTrip.items[0].position, 'Captain');
+check('number value lands in jerseyNo', roundTrip.items[0].jerseyNo, '10');
+check('name is not clobbered by pos', roundTrip.items[0].name, 'Ahmed Ali');
+
+const cutHeader = parsePastedNames(
+  ['name,cuttype,notes', 'Ahmed Ali,Jersey Standard,back only'].join('\n'),
+);
+check('cuttype maps to cutType', cutHeader.columns[1], 'cutType');
+check('cutType value', cutHeader.items[0].cutType, 'Jersey Standard');
+check('notes column found via alias', cutHeader.columns[2], 'notes');
+check('notes value', cutHeader.items[0].notes, 'back only');
+
+// Excel loves a trailing blank column. An unmapped header must be skipped,
+// not folded into `name`, or the blank data cell would wipe the name and the
+// row would stop matching on paste.
+const trailingBlank = parsePastedNames(
+  ['name,num,pos,', 'Ahmed Ali,10,Captain,'].join('\n'),
+);
+check('blank header column skipped', trailingBlank.columns[3], undefined);
+check('blank trailing cell does not wipe name', trailingBlank.items[0].name, 'Ahmed Ali');
+check('row still counted', trailingBlank.items.length, 1);
+
+console.log('\nmerge pasted rows');
+type MergeRow = {
+  name: string;
+  jerseyNo: string;
+  position: string;
+  cutType: string;
+  tag: string;
+  label: string;
+  notes: string;
+};
+const asRow = (item: ItemDraft): MergeRow => ({
+  name: item.name,
+  jerseyNo: item.jerseyNo,
+  position: item.position,
+  cutType: item.cutType,
+  tag: item.tag,
+  label: item.label,
+  notes: item.notes,
+});
+
+const seedRows: MergeRow[] = [
+  { name: 'Ahmed Ali', jerseyNo: '10', position: 'Captain', cutType: '', tag: 'XLarge', label: 'XL', notes: 'back only' },
+  { name: 'Bilal', jerseyNo: '7', position: 'Player', cutType: '', tag: 'Large', label: 'L', notes: '' },
+];
+
+// Case and surrounding whitespace must not create a second person.
+const updateOnly = parsePastedNames(
+  ['name,num,pos', '  ahmed ali  ,11,'].join('\n'),
+);
+const mergedUpdate = mergePastedRows(seedRows, updateOnly.items, asRow);
+check('matching name is not duplicated', mergedUpdate.rows.length, 2);
+check('counts as an update', mergedUpdate.updated, 1);
+check('counts nothing as added', mergedUpdate.added, 0);
+check('blank position leaves existing position', mergedUpdate.rows[0].position, 'Captain');
+check('blank tag leaves existing tag', mergedUpdate.rows[0].tag, 'XLarge');
+check('non-blank number overwrites', mergedUpdate.rows[0].jerseyNo, '11');
+check('notes survive a partial paste', mergedUpdate.rows[0].notes, 'back only');
+check('label still follows the unchanged tag', mergedUpdate.rows[0].label, 'XL');
+
+// A new name appends, and its label still derives from its tag.
+const addedNames = parsePastedNames(['name,num,tag', 'Said,9,Medium'].join('\n'));
+const mergedAdd = mergePastedRows(seedRows, addedNames.items, asRow);
+check('new name appended', mergedAdd.rows.length, 3);
+check('counts as added', mergedAdd.added, 1);
+check('counts nothing as updated', mergedAdd.updated, 0);
+check('new row fields', mergedAdd.rows[2].name, 'Said');
+check('new row label derived from tag', mergedAdd.rows[2].label, 'M');
+check('new row number', mergedAdd.rows[2].jerseyNo, '9');
+
+// Changing the tag must recompute the label, or it would contradict the tag.
+const retag = parsePastedNames(['name,tag', 'Ahmed Ali,Large'].join('\n'));
+const mergedRetag = mergePastedRows(seedRows, retag.items, asRow);
+check('tag overwritten', mergedRetag.rows[0].tag, 'Large');
+check('label recomputed when tag changes', mergedRetag.rows[0].label, 'L');
+
+// A name repeated inside the pasted block is added twice, never merged away.
+const dupes = parsePastedNames(['name,num', 'Said,9', 'Said,9'].join('\n'));
+const mergedDupes = mergePastedRows(seedRows, dupes.items, asRow);
+check('duplicate pasted names both added', mergedDupes.added, 2);
+check('row count after duplicates', mergedDupes.rows.length, 4);
+
+// The seed rows must come back untouched: merging never mutates its input.
+check('input rows unchanged', seedRows[0].jerseyNo, '10');
+check('input label unchanged', seedRows[0].label, 'XL');
+check('input still two rows', seedRows.length, 2);
 
 console.log('\nCSV export rules');
 const csvOrder: Order = {

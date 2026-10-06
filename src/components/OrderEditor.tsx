@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { exportOrdersCsv } from '@/lib/csv';
 import { cleanText, defaultStageId, normalizeColumns } from '@/lib/normalize';
 import { suggestionsFor, type KnownValues } from '@/lib/known';
+import { mergePastedRows, nameKey, parsePastedNames, type PasteMerge } from '@/lib/paste';
 
 import { SIZE_LABELS, SIZE_TAGS, labelForTag } from '@/lib/sizes';
 import { useApp, type EditableRow } from '@/state/AppProvider';
@@ -29,6 +30,7 @@ import {
   ITEM_COLUMNS,
   TOGGLEABLE_COLUMNS,
   type ColumnKey,
+  type ItemDraft,
   type Order,
   type OrderItem,
   type ProductType,
@@ -77,6 +79,21 @@ function hasContent(row: RowState): boolean {
   return Boolean(
     cleanText(row.name) || cleanText(row.jerseyNo) || cleanText(row.position) || cleanText(row.tag),
   );
+}
+
+/** A pasted row joins the order's first product type, same as "+ Add row". */
+function rowFromDraft(item: ItemDraft, productTypeId: number | null): RowState {
+  return {
+    key: nextKey(),
+    name: item.name,
+    jerseyNo: item.jerseyNo,
+    position: item.position,
+    cutType: item.cutType,
+    tag: item.tag,
+    label: item.label,
+    notes: item.notes,
+    productTypeId,
+  };
 }
 
 /**
@@ -151,6 +168,7 @@ export function OrderEditor({
 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -283,6 +301,11 @@ export function OrderEditor({
     exportOrdersCsv([draftOrder], draftItems, data.settings, `${draftOrder.orderNo}.csv`);
   }
 
+  function applyPastedRows(merged: PasteMerge<RowState>) {
+    setRows(merged.rows);
+    setPasteOpen(false);
+  }
+
   return (
     <Modal
       title={existing ? `Edit ${existing.orderNo}` : 'New order'}
@@ -410,12 +433,174 @@ export function OrderEditor({
           onToggleColumn={toggleColumn}
           onRemove={(key) => setRows((current) => current.filter((row) => row.key !== key))}
           onAdd={() => setRows((current) => [...current, blankRow(newRowType)])}
+          onPaste={() => setPasteOpen(true)}
         />
+
+        {pasteOpen ? (
+          <PasteCsvModal
+            rows={rows}
+            productTypeId={newRowType}
+            onApply={applyPastedRows}
+            onClose={() => setPasteOpen(false)}
+          />
+        ) : null}
 
         <p className="text-xs text-slate-500">
           {draftItems.length} name{draftItems.length === 1 ? '' : 's'} in this order
           {existing ? ` · ${itemCounts.get(existing.id) ?? 0} currently saved` : ''}
         </p>
+      </div>
+    </Modal>
+  );
+}
+
+const PASTE_COLUMNS: Partial<Record<ColumnKey, string>> = {
+  name: 'Name',
+  jerseyNo: 'Number',
+  position: 'Position',
+  cutType: 'Cut Type',
+  tag: 'Tag',
+  label: 'Label',
+  notes: 'Notes',
+};
+
+function PasteCsvModal({
+  rows,
+  productTypeId,
+  onApply,
+  onClose,
+}: {
+  rows: RowState[];
+  productTypeId: number | null;
+  onApply: (merged: PasteMerge<RowState>) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState('');
+
+  const parsed = useMemo(() => parsePastedNames(text), [text]);
+
+  const merged = useMemo(
+    () => mergePastedRows(rows, parsed.items, (item) => rowFromDraft(item, productTypeId)),
+    [productTypeId, parsed.items, rows],
+  );
+
+  // Name of every row already in the table, so the preview can flag a pasted
+  // row as an update rather than a new one. Built from the table, not from the
+  // merge, so a name repeated in the pasted block still reads as "new" twice.
+  const existingNames = useMemo(() => new Set(rows.map((row) => nameKey(row.name))), [rows]);
+
+  const empty = parsed.items.length === 0;
+
+  // Columns we could not map are dropped from the preview too — their cells
+  // never reach the parsed items, so showing them would just be blank noise.
+  const shownColumns = parsed.columns.filter((key): key is ColumnKey =>
+    key !== undefined && ITEM_COLUMNS.includes(key),
+  );
+  const headers = shownColumns.map((key) => PASTE_COLUMNS[key] ?? key);
+
+  return (
+    <Modal
+      title="Paste rows from CSV"
+      subtitle={
+        parsed.headerDetected
+          ? `Header row recognised: ${headers.join(', ')}`
+          : 'No header row found — columns are read as name, number, position, tag, label.'
+      }
+      size="xl"
+      onClose={onClose}
+      footer={
+        <>
+          <span className="mr-auto text-xs text-slate-500">
+            {empty
+              ? 'Nothing to add yet'
+              : `${merged.added} new, ${merged.updated} updated`}
+          </span>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={empty} onClick={() => onApply(merged)}>
+            Apply rows
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Paste a block of rows" hint="Comma or tab separated. A header row is optional.">
+          <TextArea
+            rows={8}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder={'name,num,pos,tag\nAhmed Ali,10,Captain,XLarge\nBilal,7,Player,Large'}
+            className="font-mono text-xs"
+          />
+        </Field>
+
+        {empty ? (
+          <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
+            Paste a CSV or a block of tab-separated rows above to see how they will be applied.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+              <span className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">
+                {merged.added} new row{merged.added === 1 ? '' : 's'}
+              </span>
+              <span className="rounded bg-amber-100 px-2 py-1 text-amber-800">
+                {merged.updated} matching row{merged.updated === 1 ? '' : 's'} updated
+              </span>
+            </div>
+
+            <div className="max-h-64 overflow-auto rounded-lg border border-slate-200">
+              <table className="w-full border-collapse text-xs">
+                <thead className="sticky top-0 bg-slate-50">
+                  <tr>
+                    <th className="border-b border-slate-200 px-2 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">
+                      Action
+                    </th>
+                    {headers.map((header, index) => (
+                      <th
+                        key={`${header}-${index}`}
+                        className="border-b border-slate-200 px-2 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.items.map((item, index) => {
+                    const isUpdate = existingNames.has(nameKey(item.name));
+                    return (
+                      <tr key={`${nameKey(item.name)}-${index}`} className="even:bg-slate-50/60">
+                        <td className="border-b border-slate-100 px-2 py-1">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                              isUpdate ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                          >
+                            {isUpdate ? 'update' : 'new'}
+                          </span>
+                        </td>
+                        {shownColumns.map((key, index) => (
+                          <td
+                            key={`${key}-${index}`}
+                            className="border-b border-slate-100 px-2 py-1 text-slate-700"
+                          >
+                            {item[key] || <span className="text-slate-300">—</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Rows that match an existing name update it in place and leave blank cells untouched.
+              Everything else is appended as a new row. Nothing is saved until you press{' '}
+              <span className="font-semibold text-slate-700">Save order</span>.
+            </p>
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -501,6 +686,7 @@ function ItemTable({
   onToggleColumn,
   onRemove,
   onAdd,
+  onPaste,
 }: {
   rows: RowState[];
   columns: ColumnKey[];
@@ -514,6 +700,7 @@ function ItemTable({
   onToggleColumn: (key: ColumnKey) => void;
   onRemove: (key: string) => void;
   onAdd: () => void;
+  onPaste: () => void;
 }) {
   const visible = ITEM_COLUMNS.filter((key) => columns.includes(key));
   const headings = showTypeColumn ? ['Product', ...visible.map((key) => COLUMN_LABELS[key])] : visible.map((key) => COLUMN_LABELS[key]);
@@ -554,9 +741,14 @@ function ItemTable({
           ))}
           <span className="text-xs text-slate-400">Name always shown</span>
         </div>
-        <Button size="sm" onClick={onAdd}>
-          + Add row
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={onPaste}>
+            Paste CSV
+          </Button>
+          <Button size="sm" onClick={onAdd}>
+            + Add row
+          </Button>
+        </div>
       </header>
 
       <Options id="known-customers" values={customerOptions} />
