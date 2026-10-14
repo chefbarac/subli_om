@@ -61,6 +61,25 @@ function blankRow(productTypeId: number | null): RowState {
   };
 }
 
+/**
+ * A new row inherits the categorical fields of the row above so a run of
+ * similar garments only needs the identity columns filled in. Name, jersey
+ * number and notes always start blank.
+ */
+function rowAfter(previous: RowState, fallbackType: number | null): RowState {
+  return {
+    key: nextKey(),
+    name: '',
+    jerseyNo: '',
+    position: previous.position,
+    cutType: previous.cutType,
+    tag: previous.tag,
+    label: labelForTag(previous.tag),
+    notes: '',
+    productTypeId: previous.productTypeId ?? fallbackType,
+  };
+}
+
 function toRowState(item: OrderItem): RowState {
   return {
     key: `db-${item.id}`,
@@ -433,7 +452,15 @@ export function OrderEditor({
           onUpdate={updateRow}
           onToggleColumn={toggleColumn}
           onRemove={(key) => setRows((current) => current.filter((row) => row.key !== key))}
-          onAdd={() => setRows((current) => [...current, blankRow(newRowType)])}
+          onAdd={() =>
+            setRows((current) => {
+              const previous = current[current.length - 1];
+              return [
+                ...current,
+                previous ? rowAfter(previous, newRowType) : blankRow(newRowType),
+              ];
+            })
+          }
           onPaste={() => setPasteOpen(true)}
         />
 
